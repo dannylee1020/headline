@@ -1,0 +1,88 @@
+{
+  "name": "newsbar",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Rotating RSS headlines for Claude Code, OpenCode, and Pi.",
+  "type": "module",
+  "bin": {
+    "newsbar": "./dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/core/index.d.ts",
+      "import": "./dist/core/index.js"
+    },
+    "./pi": {
+      "types": "./dist/adapters/pi/index.d.ts",
+      "import": "./dist/adapters/pi/index.js"
+    },
+    "./tui": {
+      "types": "./dist/adapters/opencode/index.d.ts",
+      "import": "./dist/adapters/opencode/index.js"
+    },
+    "./cli": {
+      "types": "./dist/cli/index.d.ts",
+      "import": "./dist/cli/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=22.19.0",
+    "opencode": ">=1.18.4 <2"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "check": "npm run typecheck && npm test && npm run build",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "sax": "^1.6.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": ">=0.81.1",
+    "@earendil-works/pi-tui": ">=0.81.1",
+    "@opencode-ai/plugin": ">=1.18.4 <2",
+    "@opentui/core": ">=0.4.5",
+    "@opentui/solid": ">=0.4.5"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    },
+    "@opencode-ai/plugin": {
+      "optional": true
+    },
+    "@opentui/core": {
+      "optional": true
+    },
+    "@opentui/solid": {
+      "optional": true
+    },
+    "@earendil-works/pi-tui": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "0.81.1",
+    "@earendil-works/pi-tui": "0.81.1",
+    "@opencode-ai/plugin": "1.18.4",
+    "@opentui/core": "0.4.5",
+    "@opentui/solid": "0.4.5",
+    "@types/node": "^22.10.0",
+    "@types/sax": "^1.2.7",
+    "jsonc-parser": "^3.3.1",
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.0"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/adapters/pi/index.js"
+    ]
+  }
+}
