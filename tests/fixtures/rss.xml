@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Feed</title>
+    <item>
+      <title>A useful &amp; safe headline</title>
+      <link>https://example.com/story-one</link>
+      <guid isPermaLink="false">story-one</guid>
+      <pubDate>Wed, 23 Jul 2026 17:00:00 GMT</pubDate>
+      <description>This body must not be retained.</description>
+    </item>
+    <item>
+      <title>Second headline</title>
+      <link>https://example.com/story-two#fragment</link>
+      <pubDate>Wed, 23 Jul 2026 16:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Bad link</title>
+      <link>javascript:alert(1)</link>
+    </item>
+  </channel>
+</rss>
