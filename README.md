@@ -46,7 +46,7 @@ Exit codes:
 
 - **Claude Code:** command status line, installed through the built CLI.
 - **OpenCode:** native TUI plugin using the `app_bottom` slot; requires OpenCode `>=1.18.4 <2`.
-- **Pi:** local package using a below-editor widget; tested with Pi `0.81.1` and Node `>=22.19.0`.
+- **Pi:** local package using Pi's native extension-status row; tested with Pi `0.81.1` and Node `>=22.19.0`.
 
 Codex and tmux are intentionally not part of v0.
 
@@ -60,6 +60,27 @@ Exactly these unauthenticated RSS/XML feeds are used:
 - NPR — `general` — <https://feeds.npr.org/1001/rss.xml>
 
 Newsbar retains headline metadata only: title, article URL, source, category, and timestamps. It does not scrape pages, retrieve article bodies, use API keys, send telemetry, or add headlines to model context.
+
+## Configuration
+
+Newsbar reads an optional JSON configuration file from `${XDG_CONFIG_HOME:-$HOME/.config}/newsbar/config.json`. Create it manually:
+
+```json
+{
+  "version": 1,
+  "providers": ["hacker-news", "techcrunch"],
+  "categories": ["tech"],
+  "visibility": "working",
+  "rotationSeconds": 8
+}
+```
+
+- `providers` — any of `hacker-news`, `techcrunch`, `yahoo-finance`, or `npr`.
+- `categories` — news types: any of `tech`, `finance`, or `general`. A headline must match both the provider and category selections.
+- `visibility` — `working` (default), `always`, or `off`. `working` shows Newsbar only while the host is processing a task.
+- `rotationSeconds` — headline rotation interval from 2 to 60 seconds.
+
+Omit a filter or use an empty array to select all default providers/categories. Only the four built-in providers can be selected; custom feeds are not supported. Missing or invalid configuration falls back to defaults without interrupting the host. Run `newsbar doctor` to print the config path, effective settings, and validation errors. Restart Pi or OpenCode after changing the file; Claude reads it for each status invocation.
 
 ## Manual/local development
 
@@ -83,20 +104,22 @@ The installer creates `<settings>.newsbar.bak`, preserves unrelated settings/hoo
 
 ### OpenCode
 
-The source installer writes the stable TUI module path to the global `tui.json` configuration using a JSONC-aware, backup-safe edit. Set `NEWSBAR_OPENCODE_CONFIG` to test another file. The row is visible only for the current session while OpenCode reports `busy` or `retry`.
+The source installer writes the stable TUI module path to the global `tui.json` configuration using a JSONC-aware, backup-safe edit. Set `NEWSBAR_OPENCODE_CONFIG` to test another file. With the default `working` visibility, the row is visible only for the current session while OpenCode reports `busy` or `retry`; use `always` to keep it visible while the session is open.
 
 ### Pi
 
-The source installer invokes `pi install <stable-install-dir>` at user scope. Set `NEWSBAR_PI_PROJECT=1` for `pi install -l` project scope. Pi owns its settings format; Newsbar does not edit Pi settings directly.
+The source installer invokes `pi install <stable-install-dir>` at user scope. Set `NEWSBAR_PI_PROJECT=1` for `pi install -l` project scope. Pi owns its settings format; Newsbar does not edit Pi settings directly. Newsbar publishes a native extension status; with the default `working` visibility it appears between `agent_start` and `agent_settled`, while `always` keeps it visible for the session. Pi's default footer renders extension statuses as its final row; custom footers must render `footerData.getExtensionStatuses()` to preserve that integration.
 
 ## Runtime behavior
 
 - Feeds refresh concurrently with a five-second timeout, RSS/XML `Accept`, descriptive `User-Agent`, and a one MiB response limit.
 - A failed source does not discard healthy sources or last-good data.
-- Rotation is deterministic: the headline changes every eight seconds without writing an index on every tick.
+- Rotation is deterministic: the headline changes at the configured interval (eight seconds by default) without writing an index on every tick.
+- Headline text uses terminal-native hyperlinks where supported, opening the RSS article URL without displaying it; some terminals require Cmd-click or Ctrl-click.
 - Claude status invocations return cached/loading output immediately; refresh happens in at most one bounded worker.
 - `NEWSBAR_OFFLINE=1` or `PI_OFFLINE=1` can suppress network requests in host integrations.
 - Cache state is stored under `NEWSBAR_CACHE_DIR`, `XDG_CACHE_HOME/newsbar`, `%LOCALAPPDATA%/newsbar`, or `~/.cache/newsbar` depending on platform.
+- `working` visibility uses Claude activity hooks, OpenCode `busy`/`retry` state, or Pi's `agent_start`/`agent_settled` events; `always` keeps the selected headline visible for the host session.
 
 To restore Claude settings, stop Claude Code and replace the settings file with its `.newsbar.bak` copy. Remove the stable Newsbar install directory only after removing host registrations.
 

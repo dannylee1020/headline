@@ -31,8 +31,35 @@ describe("Claude integration", () => {
       }],
     };
     await new FileSnapshotCache({ root }).write(snapshot);
-    const output = await runStatus({ session_id: "session-1" }, { root, now: 1000, spawnWorker: vi.fn() });
+    const output = await runStatus({ session_id: "session-1" }, { root, configPath: join(root, "config.json"), now: 1000, spawnWorker: vi.fn() });
     expect(output).toContain("Cached headline");
+  });
+
+  it("honors always visibility and provider/category filters", async () => {
+    const root = await tempRoot();
+    const configPath = join(root, "config.json");
+    await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({
+      providers: ["npr"],
+      categories: ["general"],
+      visibility: "always",
+    })));
+    const snapshot: NewsSnapshot = {
+      version: 1,
+      updatedAt: 1000,
+      health: [],
+      sources: [{
+        source: DEFAULT_SOURCES[3]!,
+        fetchedAt: 1000,
+        headlines: [{
+          id: "npr-1", title: "Always headline", url: "https://example.com/story", sourceId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
+        }],
+      }],
+    };
+    await new FileSnapshotCache({ root }).write(snapshot);
+
+    await expect(runStatus({ session_id: "idle-session" }, { root, configPath, now: 1000, spawnWorker: vi.fn() })).resolves.toContain("Always headline");
+    await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({ visibility: "off" })));
+    await expect(runStatus({ session_id: "idle-session" }, { root, configPath, now: 1000, spawnWorker: vi.fn() })).resolves.toBe("");
   });
 
   it("merges settings, preserves unrelated values, and is idempotent", async () => {

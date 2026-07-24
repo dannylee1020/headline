@@ -92,12 +92,20 @@ export interface TimerScheduler {
   clearInterval(handle: unknown): void;
 }
 
+export interface NewsFilters {
+  readonly providers?: readonly string[];
+  readonly categories?: readonly Category[];
+}
+
 export interface ControllerOptions {
   readonly cache: SourceCache;
   readonly clock?: Clock;
   readonly scheduler?: TimerScheduler;
   readonly refresh: (signal: AbortSignal) => Promise<RefreshResult>;
   readonly intervalMs?: number;
+  readonly feedTtlMs?: number;
+  readonly maxItems?: number;
+  readonly filters?: NewsFilters;
   readonly onInvalidate: () => void;
 }
 

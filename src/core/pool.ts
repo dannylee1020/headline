@@ -1,5 +1,5 @@
 import { canonicalUrl, validHttpUrl } from "./rss.js";
-import type { CategoryFilter, Headline, NewsSnapshot } from "./types.js";
+import type { CategoryFilter, Headline, NewsFilters, NewsSnapshot } from "./types.js";
 
 function newestFirst(a: Headline, b: Headline): number {
   const aDate = a.publishedAt ?? Number.NEGATIVE_INFINITY;
@@ -39,9 +39,13 @@ function roundRobin(groups: readonly (readonly Headline[])[]): Headline[] {
   return output;
 }
 
-export function buildPool(snapshot: NewsSnapshot, maxItems = 20): readonly Headline[] {
+export function buildPool(snapshot: NewsSnapshot, maxItems = 20, filters: NewsFilters = {}): readonly Headline[] {
+  const providers = filters.providers?.length ? new Set(filters.providers) : undefined;
+  const categories = filters.categories?.length ? new Set(filters.categories) : undefined;
   const bySource = new Map<string, Headline[]>();
   for (const sourceSnapshot of snapshot.sources) {
+    if (providers && !providers.has(sourceSnapshot.source.id)) continue;
+    if (categories && !categories.has(sourceSnapshot.source.category)) continue;
     const items = deduplicate([...sourceSnapshot.headlines].sort(newestFirst)).slice(0, maxItems);
     bySource.set(sourceSnapshot.source.id, items);
   }

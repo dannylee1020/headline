@@ -1,10 +1,12 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui";
-import { DEFAULT_INTERVAL_MS } from "../../core/config.js";
-import { DEFAULT_SOURCES } from "../../core/default-sources.js";
-import { formatHeadline } from "../../core/format.js";
+import { StyledText, type TextChunk } from "@opentui/core";
+import { loadConfig } from "../../core/config.js";
+import { sourcesForConfig } from "../../core/default-sources.js";
+import { displaySegments } from "../../core/format.js";
 import { refreshFeeds } from "../../core/fetch-feeds.js";
 import { NewsController } from "../../runtime/news-controller.js";
+import type { Headline } from "../../core/types.js";
 import { MemoryCache } from "../../runtime/memory-cache.js";
 
 function crop(value: string, width: number): string {
@@ -14,7 +16,22 @@ function crop(value: string, width: number): string {
   return safeWidth === 1 ? "…" : `${value.slice(0, safeWidth - 1)}…`;
 }
 
+function linkedHeadline(headline: Headline | undefined, width: number): StyledText | undefined {
+  const segments = displaySegments(headline);
+  if (!segments) return undefined;
+  const prefix = `${segments.source} · `;
+  const title = crop(segments.title, Math.max(0, width - prefix.length));
+  const titleChunk: TextChunk = {
+    __isChunk: true,
+    text: title,
+    ...(segments.url ? { link: { url: segments.url } } : {}),
+  };
+  return new StyledText([{ __isChunk: true, text: prefix }, titleChunk]);
+}
+
 const tui: TuiPlugin = async (api) => {
+  const config = (await loadConfig()).config;
+  const sources = sourcesForConfig(config);
   const cache = new MemoryCache();
   let controller: NewsController | undefined;
   let sessionId: string | undefined;
@@ -29,12 +46,24 @@ const tui: TuiPlugin = async (api) => {
     if (disposed) return;
     const nextSessionId = getSessionId();
     const status = nextSessionId ? api.state.session.status(nextSessionId) : undefined;
-    const shouldRun = Boolean(nextSessionId && status && (status.type === "busy" || status.type === "retry"));
+    const shouldRun = config.visibility === "always"
+      ? Boolean(nextSessionId)
+      : config.visibility === "working"
+        ? Boolean(nextSessionId && status && (status.type === "busy" || status.type === "retry"))
+        : false;
     if (!controller) {
       controller = new NewsController({
         cache,
-        intervalMs: DEFAULT_INTERVAL_MS,
-        refresh: (signal) => refreshFeeds(DEFAULT_SOURCES, controller?.getSnapshot(), { signal }),
+        intervalMs: config.intervalMs,
+        feedTtlMs: config.feedTtlMs,
+        maxItems: config.maxItems,
+        filters: config,
+        refresh: (signal) => refreshFeeds(sources, controller?.getSnapshot(), {
+          signal,
+          timeoutMs: config.timeoutMs,
+          maxBytes: config.maxBytes,
+          maxItems: config.maxItems,
+        }),
         onInvalidate: () => api.renderer.requestRender(),
       });
     }
@@ -60,9 +89,9 @@ const tui: TuiPlugin = async (api) => {
     slots: {
       app_bottom: () => {
         sync();
-        const line = controller?.isActive() ? formatHeadline(controller.getHeadline()) : "";
+        const line = controller?.isActive() ? linkedHeadline(controller.getHeadline(), 240) : undefined;
         if (!line) return <box />;
-        return <text>{crop(line, 240)}</text>;
+        return <text content={line} />;
       },
     },
   });

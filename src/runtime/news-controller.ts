@@ -14,6 +14,9 @@ export class NewsController {
   private readonly scheduler: TimerScheduler;
   private readonly refreshFn: ControllerOptions["refresh"];
   private readonly intervalMs: number;
+  private readonly feedTtlMs: number;
+  private readonly maxItems: number;
+  private readonly filters: ControllerOptions["filters"];
   private readonly onInvalidate: () => void;
   private snapshot: NewsSnapshot | undefined;
   private timer: unknown | undefined;
@@ -29,6 +32,9 @@ export class NewsController {
     this.scheduler = options.scheduler ?? systemScheduler;
     this.refreshFn = options.refresh;
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
+    this.feedTtlMs = options.feedTtlMs ?? DEFAULT_FEED_TTL_MS;
+    this.maxItems = options.maxItems ?? 20;
+    this.filters = options.filters;
     this.onInvalidate = () => {
       try {
         options.onInvalidate();
@@ -48,7 +54,7 @@ export class NewsController {
 
   getHeadline(category: CategoryFilter = "all"): Headline | undefined {
     if (!this.isActive() || !this.snapshot) return undefined;
-    return selectHeadline(buildPool(this.snapshot), this.clock.now(), this.intervalMs, category);
+    return selectHeadline(buildPool(this.snapshot, this.maxItems, this.filters), this.clock.now(), this.intervalMs, category);
   }
 
   activate(): void {
@@ -121,7 +127,7 @@ export class NewsController {
   private refreshIfNeeded(force = false): void {
     if (!this.active || this.disposed || this.request) return;
     const newest = Math.max(0, ...(this.snapshot?.sources.map((source) => source.fetchedAt) ?? []));
-    if (!force && newest && this.clock.now() - newest < DEFAULT_FEED_TTL_MS) return;
+    if (!force && newest && this.clock.now() - newest < this.feedTtlMs) return;
     this.abort = new AbortController();
     const generation = this.generation;
     const task = this.refreshFn(this.abort.signal)

@@ -1,3 +1,4 @@
+import type { NewsbarConfig } from "./config.js";
 import type { NewsSource } from "./types.js";
 
 export const DEFAULT_SOURCES: readonly NewsSource[] = [
@@ -26,6 +27,12 @@ export const DEFAULT_SOURCES: readonly NewsSource[] = [
     url: "https://feeds.npr.org/1001/rss.xml",
   },
 ];
+
+export function sourcesForConfig(config: Pick<NewsbarConfig, "providers" | "categories">): readonly NewsSource[] {
+  const providers = new Set<string>(config.providers);
+  const categories = new Set(config.categories);
+  return DEFAULT_SOURCES.filter((source) => providers.has(source.id) && categories.has(source.category));
+}
 
 export function assertDefaultSources(sources: readonly NewsSource[] = DEFAULT_SOURCES): void {
   const expected = [

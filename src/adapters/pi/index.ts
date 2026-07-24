@@ -1,68 +1,87 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
-import { DEFAULT_INTERVAL_MS } from "../../core/config.js";
-import { DEFAULT_SOURCES } from "../../core/default-sources.js";
-import { formatHeadline } from "../../core/format.js";
+import { loadConfig } from "../../core/config.js";
+import { sourcesForConfig } from "../../core/default-sources.js";
+import { formatLinkedHeadline } from "../../core/format.js";
 import { refreshFeeds } from "../../core/fetch-feeds.js";
 import { NewsController } from "../../runtime/news-controller.js";
 import { MemoryCache } from "../../runtime/memory-cache.js";
 
-const WIDGET_KEY = "newsbar";
+const STATUS_KEY = "newsbar";
 
 export default function newsbarExtension(pi: ExtensionAPI): void {
   let controller: NewsController | undefined;
-  let tuiEnabled = false;
-  let requestRender = (): void => {};
-  let clearWidget = (): void => {};
+  let updateStatus = (): void => {};
+  let taskActive = false;
+  let visibility: "always" | "working" | "off" = "working";
 
   pi.on("session_start", async (_event, ctx) => {
     if (ctx.mode !== "tui") return;
-    tuiEnabled = true;
+
+    const loaded = await loadConfig();
+    const config = loaded.config;
+    visibility = config.visibility;
+    taskActive = false;
     const cache = new MemoryCache();
-    controller = new NewsController({
-      cache,
-      intervalMs: DEFAULT_INTERVAL_MS,
-      refresh: (signal) => refreshFeeds(DEFAULT_SOURCES, controller?.getSnapshot(), { signal }),
-      onInvalidate: () => requestRender(),
-    });
+    updateStatus = () => {
+      const visible = visibility === "always" || (visibility === "working" && taskActive);
+      try {
+        if (!visible) {
+          ctx.ui.setStatus(STATUS_KEY, undefined);
+          return;
+        }
+        const headline = controller?.getHeadline();
+        const line = headline
+          ? formatLinkedHeadline(headline)
+          : controller?.getSnapshot()
+            ? "Headlines unavailable"
+            : "Loading headlines…";
+        ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", line));
+      } catch {
+        // Host rendering must never affect agent execution.
+      }
+    };
 
-    ctx.ui.setWidget(
-      WIDGET_KEY,
-      (tui, theme) => {
-        requestRender = () => tui.requestRender();
-        clearWidget = () => ctx.ui.setWidget(WIDGET_KEY, undefined);
-        return {
-        invalidate: () => tui.requestRender(),
-        render: (width: number) => {
-          const line = formatHeadline(controller?.getHeadline());
-          if (!line || !controller?.isActive()) return [];
-          return [truncateToWidth(theme.fg("dim", line), Math.max(0, width))];
-        },
-        dispose: () => {
-          // Controller owns timers and requests; shutdown performs final disposal.
-        },
-        };
-      },
-      { placement: "belowEditor" },
-    );
+    if (visibility !== "off") {
+      controller = new NewsController({
+        cache,
+        intervalMs: config.intervalMs,
+        feedTtlMs: config.feedTtlMs,
+        maxItems: config.maxItems,
+        filters: config,
+        refresh: (signal) => refreshFeeds(sourcesForConfig(config), controller?.getSnapshot(), {
+          signal,
+          timeoutMs: config.timeoutMs,
+          maxBytes: config.maxBytes,
+          maxItems: config.maxItems,
+        }),
+        onInvalidate: () => updateStatus(),
+      });
+      if (visibility === "always") controller.activate();
+    }
+    updateStatus();
   });
 
-  pi.on("agent_start", async () => {
-    if (!tuiEnabled) return;
-    controller?.activate();
+  pi.on("agent_start", () => {
+    taskActive = true;
+    if (visibility === "working") controller?.activate();
+    updateStatus();
   });
 
-  pi.on("agent_settled", async () => {
-    if (!tuiEnabled) return;
-    controller?.deactivate();
+  pi.on("agent_settled", () => {
+    taskActive = false;
+    if (visibility === "working") controller?.deactivate();
+    updateStatus();
   });
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (_event, ctx) => {
+    updateStatus = () => {};
+    taskActive = false;
     controller?.dispose();
     controller = undefined;
-    clearWidget();
-    requestRender = () => {};
-    clearWidget = () => {};
-    tuiEnabled = false;
+    try {
+      ctx.ui.setStatus(STATUS_KEY, undefined);
+    } catch {
+      // Ignore teardown failures.
+    }
   });
 }

@@ -4,6 +4,7 @@ import { installClaude } from "../adapters/claude/install.js";
 import { installOpenCode } from "../adapters/opencode/install.js";
 import { installPi } from "../adapters/pi/install.js";
 import { parseJsonInput, runLifecycle, runRefreshWorker, runStatus } from "../adapters/claude/runtime.js";
+import { configSummary, loadConfig } from "../core/config.js";
 import { cacheRoot } from "../runtime/file-cache.js";
 
 function option(argv: readonly string[], name: string): string | undefined {
@@ -51,7 +52,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (argv[0] === "doctor") {
-      process.stdout.write(`Newsbar cache: ${cacheRoot()}\nNode: ${process.version}\n`);
+      const loaded = await loadConfig();
+      process.stdout.write(`Newsbar cache: ${cacheRoot()}\nNode: ${process.version}\nNewsbar config: ${loaded.path}\nEffective config: ${JSON.stringify(configSummary(loaded.config))}\n`);
+      if (loaded.errors.length) {
+        process.stdout.write(`Config errors:\n${loaded.errors.map((error) => `- ${error}`).join("\n")}\n`);
+        return 1;
+      }
       return 0;
     }
     process.stderr.write("Usage: newsbar install claude [--force] | install opencode --plugin-path PATH [--config PATH] | install pi --path PATH [--project] | newsbar claude status|lifecycle active|idle|refresh-worker | newsbar doctor\n");

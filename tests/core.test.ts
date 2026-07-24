@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SOURCES } from "../src/core/default-sources.js";
 import { fetchFeed, refreshFeeds } from "../src/core/fetch-feeds.js";
+import { formatHeadline, formatLinkedHeadline, terminalHyperlink } from "../src/core/format.js";
 import { buildPool, selectHeadline } from "../src/core/pool.js";
 import { parseRss } from "../src/core/rss.js";
 import type { NewsSnapshot } from "../src/core/types.js";
@@ -37,6 +38,26 @@ describe("RSS normalization", () => {
     });
     expect(headlines[1]?.url).toContain("#fragment");
     expect(JSON.stringify(headlines)).not.toContain("body must not be retained");
+  });
+
+  it("removes terminal control characters from feed text", () => {
+    const headlines = parseRss(source(), fixture.replace("A useful", "A\u007f useful"), 1000);
+    expect(headlines[0]?.title).toBe("A useful & safe headline");
+  });
+});
+
+describe("headline formatting", () => {
+  it("prioritizes provider and headline space", () => {
+    const headline = parseRss(source(), fixture, 1000)[0];
+    expect(formatHeadline(headline)).toBe("hacker news · A useful & safe headline");
+  });
+
+  it("links the headline without displaying the URL", () => {
+    const headline = parseRss(source(), fixture, 1000)[0];
+    expect(formatLinkedHeadline(headline)).toBe(
+      "hacker news · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
+    );
+    expect(terminalHyperlink("unsafe", "javascript:alert(1)")).toBe("unsafe");
   });
 });
 
@@ -115,5 +136,7 @@ describe("pool and rotation", () => {
     expect(pool.map((item) => item.category)).toEqual(["tech", "finance", "general", "tech", "tech", "tech"]);
     expect(selectHeadline(pool, 0, 8_000)?.title).toBe("hacker-news-0");
     expect(selectHeadline(pool, 8_000, 8_000)?.title).toBe("yahoo-finance-0");
+    expect(buildPool(snapshot, 20, { providers: ["hacker-news"], categories: ["tech"] }).map((item) => item.sourceId)).toEqual(["hacker-news", "hacker-news"]);
+    expect(buildPool(snapshot, 20, { providers: ["yahoo-finance"], categories: ["finance"] }).map((item) => item.sourceId)).toEqual(["yahoo-finance"]);
   });
 });

@@ -3,8 +3,8 @@ import type { DisplaySegments, Headline } from "./types.js";
 export function displaySegments(headline: Headline | undefined): DisplaySegments | undefined {
   if (!headline) return undefined;
   return {
-    category: headline.category.toUpperCase(),
-    source: headline.sourceName,
+    category: headline.category.toLowerCase(),
+    source: headline.sourceName.toLowerCase(),
     title: headline.title,
     url: headline.url,
   };
@@ -13,5 +13,22 @@ export function displaySegments(headline: Headline | undefined): DisplaySegments
 export function formatHeadline(headline: Headline | undefined): string {
   const segments = displaySegments(headline);
   if (!segments) return "";
-  return `NEWS · ${segments.category} · ${segments.source} · ${segments.title}`;
+  return `${segments.source} · ${segments.title}`;
+}
+
+export function terminalHyperlink(text: string, url: string | undefined): string {
+  if (!url) return text;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return text;
+    return `\u001b]8;;${parsed.href}\u001b\\${text}\u001b]8;;\u001b\\`;
+  } catch {
+    return text;
+  }
+}
+
+export function formatLinkedHeadline(headline: Headline | undefined): string {
+  const segments = displaySegments(headline);
+  if (!segments) return "";
+  return `${segments.source} · ${terminalHyperlink(segments.title, segments.url)}`;
 }

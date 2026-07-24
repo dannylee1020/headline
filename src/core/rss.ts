@@ -10,7 +10,7 @@ interface RawItem {
 
 function cleanText(value: string | undefined): string | undefined {
   if (!value) return undefined;
-  const cleaned = value.replace(/\s+/gu, " ").trim();
+  const cleaned = value.replace(/\p{Cc}+/gu, " ").replace(/\s+/gu, " ").trim();
   return cleaned || undefined;
 }
 
