@@ -3,10 +3,10 @@ import { fileURLToPath } from "node:url";
 import { ActivityStore, FileSnapshotCache } from "../../runtime/file-cache.js";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
-import { formatLinkedHeadline } from "../../core/format.js";
-import { refreshFeeds } from "../../core/fetch-feeds.js";
+import { formatLinkedHeadline, HEADLINE_BULLET } from "../../core/format.js";
 import { buildPool, selectHeadline } from "../../core/pool.js";
 import type { NewsSnapshot } from "../../core/types.js";
+import { refreshNews } from "../../runtime/refresh-service.js";
 
 export interface HookInput {
   readonly session_id?: string;
@@ -77,41 +77,21 @@ export async function runStatus(input: StatusInput | undefined, options: StatusO
   const cache = new FileSnapshotCache(cacheOptions);
   const snapshot = await cache.read().catch(() => undefined);
   const configuredSources = sourcesForConfig(config);
-  const configuredProviderIds = new Set(configuredSources.map((source) => source.id));
-  const newest = Math.max(0, ...(snapshot?.sources.filter((source) => configuredProviderIds.has(source.source.id)).map((source) => source.fetchedAt) ?? []));
-  if (!newest || now - newest >= config.feedTtlMs) {
-    if (await activity.claimRefresh(now).catch(() => false)) {
-      (options.spawnWorker ?? spawnRefreshWorker)();
-    }
+  const configuredSourceIds = new Set(configuredSources.map((source) => source.id));
+  const newest = Math.max(0, ...(snapshot?.sources.filter((source) => configuredSourceIds.has(source.source.id)).map((source) => source.fetchedAt) ?? []));
+  const hasConfiguredSources = configuredSources.every((source) => snapshot?.sources.some((item) => item.source.id === source.id));
+  const lastAttempt = hasConfiguredSources ? snapshot?.updatedAt ?? newest : 0;
+  if ((!lastAttempt || now - lastAttempt >= config.refreshIntervalMs) && await activity.claimRefresh(now).catch(() => false)) {
+    (options.spawnWorker ?? spawnRefreshWorker)();
   }
-  if (!snapshot) return "NEWS · loading headlines…";
+  if (!snapshot) return `${HEADLINE_BULLET} loading headlines…`;
   return formatLinkedHeadline(selectHeadline(buildPool(snapshot, config.maxItems, config), now, config.intervalMs));
 }
 
 export async function runRefreshWorker(root?: string, configPath?: string): Promise<void> {
-  const loaded = await loadConfig(configPath ? { filePath: configPath } : {});
-  const config = loaded.config;
-  const cacheOptions = root ? { root } : {};
-  if (config.visibility === "off") {
-    await new ActivityStore(cacheOptions).releaseRefresh().catch(() => undefined);
-    return;
-  }
-  const now = Date.now();
-  const activity = new ActivityStore(cacheOptions);
-  const cache = new FileSnapshotCache(cacheOptions);
-  const configuredSources = sourcesForConfig(config);
-  try {
-    const previous = await cache.read();
-    const result = await refreshFeeds(configuredSources, previous, {
-      now,
-      timeoutMs: config.timeoutMs,
-      maxBytes: config.maxBytes,
-      maxItems: config.maxItems,
-    });
-    await cache.write(result.snapshot);
-  } catch {
-    // A feed worker is best effort and never reports into Claude.
-  } finally {
-    await activity.releaseRefresh().catch(() => undefined);
-  }
+  await refreshNews({
+    ...(root ? { root } : {}),
+    ...(configPath ? { configPath } : {}),
+    lockHeld: true,
+  }).catch(() => undefined);
 }

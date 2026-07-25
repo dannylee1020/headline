@@ -1,4 +1,4 @@
-import { chmod, cp, mkdtemp, mkdir, symlink, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
 import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -9,7 +9,7 @@ const execFileAsync = promisify(execFile);
 const shellScript = join(process.cwd(), "install.sh");
 
 async function fakePath(hosts: Record<string, string> = {}, options: { archive?: string; npmFailure?: boolean; fakeNode?: boolean } = {}): Promise<{ path: string; marker: string }> {
-  const root = await mkdtemp(join(tmpdir(), "newsbar-path-"));
+  const root = await mkdtemp(join(tmpdir(), "headline-path-"));
   const marker = join(root, "curl-called");
   const bin = join(root, "bin");
   await mkdir(bin);
@@ -48,7 +48,8 @@ describe("install.sh", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        NEWSBAR_INSTALL_DIR: join(tmpdir(), "newsbar-no-host-test"),
+        HEADLINE_HOME: join(tmpdir(), "headline-no-host-home"),
+        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-no-host-test"),
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(2);
@@ -62,8 +63,9 @@ describe("install.sh", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        NEWSBAR_DRY_RUN: "1",
-        NEWSBAR_INSTALL_DIR: join(tmpdir(), "newsbar-all-hosts-test"),
+        HEADLINE_DRY_RUN: "1",
+        HEADLINE_HOME: join(tmpdir(), "headline-all-hosts-home"),
+        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-all-hosts-test"),
       },
     });
     expect(result.stdout).toContain("Detected Claude Code");
@@ -78,8 +80,9 @@ describe("install.sh", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        NEWSBAR_DRY_RUN: "1",
-        NEWSBAR_INSTALL_DIR: join(tmpdir(), "newsbar-old-opencode-test"),
+        HEADLINE_DRY_RUN: "1",
+        HEADLINE_HOME: join(tmpdir(), "headline-old-opencode-home"),
+        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-old-opencode-test"),
       },
     });
     expect(`${result.stdout}${result.stderr}`).toContain("unsupported");
@@ -88,9 +91,9 @@ describe("install.sh", () => {
 });
 
 async function sourceArchive(): Promise<string> {
-  const root = await mkdtemp(join(tmpdir(), "newsbar-archive-"));
-  const source = join(root, "newsbar-source");
-  const archive = join(root, "newsbar-source.tar.gz");
+  const root = await mkdtemp(join(tmpdir(), "headline-archive-"));
+  const source = join(root, "headline-source");
+  const archive = join(root, "headline-source.tar.gz");
   await mkdir(source);
   for (const file of ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts", "install.sh", "README.md"]) {
     await cp(join(process.cwd(), file), join(source, file));
@@ -98,14 +101,14 @@ async function sourceArchive(): Promise<string> {
   for (const directory of ["src", "tests", "dist"]) {
     await cp(join(process.cwd(), directory), join(source, directory), { recursive: true });
   }
-  await execFileAsync("tar", ["-czf", archive, "-C", root, "newsbar-source"]);
+  await execFileAsync("tar", ["-czf", archive, "-C", root, "headline-source"]);
   return archive;
 }
 
 describe("install.sh staging", () => {
   it("leaves the current install unchanged when the source build fails", async () => {
     const archive = await sourceArchive();
-    const installDir = await mkdtemp(join(tmpdir(), "newsbar-current-"));
+    const installDir = await mkdtemp(join(tmpdir(), "headline-current-"));
     const sentinel = join(installDir, "sentinel");
     await writeFile(sentinel, "keep");
     const fake = await fakePath({ pi: "0.81.1" }, { archive, npmFailure: true, fakeNode: true });
@@ -113,9 +116,10 @@ describe("install.sh staging", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        NEWSBAR_ARCHIVE_URL: "https://example.test/newsbar.tar.gz",
-        NEWSBAR_INSTALL_HOSTS: "pi",
-        NEWSBAR_INSTALL_DIR: installDir,
+        HEADLINE_ARCHIVE_URL: "https://example.test/headline.tar.gz",
+        HEADLINE_INSTALL_HOSTS: "pi",
+        HEADLINE_HOME: join(tmpdir(), "headline-failure-home"),
+        HEADLINE_INSTALL_DIR: installDir,
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(1);
@@ -124,20 +128,29 @@ describe("install.sh staging", () => {
 
   it("promotes a built tree and invokes detected Pi", async () => {
     const archive = await sourceArchive();
-    const parent = await mkdtemp(join(tmpdir(), "newsbar-promote-"));
-    const installDir = join(parent, "newsbar");
+    const parent = await mkdtemp(join(tmpdir(), "headline-promote-"));
+    const installDir = join(parent, "headline");
+    const home = join(parent, "home");
+    await mkdir(join(home, "cache"), { recursive: true });
+    await writeFile(join(home, "config.json"), "{\"visibility\":\"always\"}\n");
+    await writeFile(join(home, "cache", "snapshot.json"), "cached\n");
     const fake = await fakePath({ pi: "0.81.1" }, { archive, fakeNode: true });
     const result = await execFileAsync("sh", [shellScript], {
       env: {
         ...process.env,
         PATH: fake.path,
-        NEWSBAR_ARCHIVE_URL: "https://example.test/newsbar.tar.gz",
-        NEWSBAR_INSTALL_HOSTS: "pi",
-        NEWSBAR_INSTALL_DIR: installDir,
+        HEADLINE_ARCHIVE_URL: "https://example.test/headline.tar.gz",
+        HEADLINE_INSTALL_HOSTS: "pi",
+        HEADLINE_HOME: home,
+        HEADLINE_INSTALL_DIR: installDir,
       },
     });
-    expect(result.stdout).toContain("Installed Newsbar source tree");
-    expect(result.stdout).toContain("All detected Newsbar integrations installed successfully");
+    expect(result.stdout).toContain("Installed Headline application");
+    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
     await import("node:fs/promises").then(({ access }) => access(join(installDir, "dist", "cli", "index.js")));
+    const launcher = join(home, "bin", "headline");
+    expect(await readFile(launcher, "utf8")).toContain(join(installDir, "dist", "cli", "index.js"));
+    expect(await readFile(join(home, "config.json"), "utf8")).toContain("always");
+    expect(await readFile(join(home, "cache", "snapshot.json"), "utf8")).toBe("cached\n");
   });
 });

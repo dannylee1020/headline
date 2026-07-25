@@ -9,13 +9,13 @@ import { FileSnapshotCache } from "../src/runtime/file-cache.js";
 import type { NewsSnapshot } from "../src/core/types.js";
 
 async function tempRoot(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "newsbar-test-"));
+  return mkdtemp(join(tmpdir(), "headline-test-"));
 }
 
 describe("Claude integration", () => {
   it("tracks activity and returns cached status without network", async () => {
     const root = await tempRoot();
-    vi.stubEnv("NEWSBAR_CACHE_DIR", root);
+    vi.stubEnv("HEADLINE_CACHE_DIR", root);
     await runLifecycle("active", { session_id: "session-1" }, 1000);
     vi.unstubAllEnvs();
     const snapshot: NewsSnapshot = {
@@ -23,10 +23,10 @@ describe("Claude integration", () => {
       updatedAt: 1000,
       health: [],
       sources: [{
-        source: DEFAULT_SOURCES[3]!,
+        source: DEFAULT_SOURCES.find((source) => source.id === "npr:general")!,
         fetchedAt: 1000,
         headlines: [{
-          id: "npr-1", title: "Cached headline", url: "https://example.com/story", sourceId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
+          id: "npr-1", title: "Cached headline", url: "https://example.com/story", sourceId: "npr:general", providerId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
         }],
       }],
     };
@@ -48,10 +48,10 @@ describe("Claude integration", () => {
       updatedAt: 1000,
       health: [],
       sources: [{
-        source: DEFAULT_SOURCES[3]!,
+        source: DEFAULT_SOURCES.find((source) => source.id === "npr:general")!,
         fetchedAt: 1000,
         headlines: [{
-          id: "npr-1", title: "Always headline", url: "https://example.com/story", sourceId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
+          id: "npr-1", title: "Always headline", url: "https://example.com/story", sourceId: "npr:general", providerId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
         }],
       }],
     };
@@ -72,8 +72,10 @@ describe("Claude integration", () => {
     expect(parsed.theme).toBe("dark");
     expect(parsed.statusLine).toMatchObject({ type: "command", refreshInterval: 8 });
     expect(String((parsed.statusLine as { command: string }).command)).toContain("status");
-    expect(first.backupPath).toContain(".newsbar.bak");
-    await installClaude({ settingsPath, nodePath: "/node", cliPath: "/cli" });
+    expect(first.backupPath).toContain(".headline.bak");
+    await installClaude({ settingsPath, nodePath: "/node", cliPath: "/cli", commandPath: "/headline/bin/headline" });
+    const launcherSettings = JSON.parse(await readFile(settingsPath, "utf8")) as { statusLine: { command: string }; hooks: Record<string, unknown[]> };
+    expect(launcherSettings.statusLine.command).toContain("/headline/bin/headline");
     const again = JSON.parse(await readFile(settingsPath, "utf8")) as { hooks: Record<string, unknown[]> };
     expect((again.hooks.UserPromptSubmit ?? []).length).toBe(1);
   });

@@ -121,6 +121,7 @@ export function parseRss(source: NewsSource, xml: string, fetchedAt: number, max
         title,
         url,
         sourceId: source.id,
+        providerId: source.providerId,
         sourceName: source.name,
         category: source.category,
         ...(Number.isFinite(publishedAt) ? { publishedAt } : {}),

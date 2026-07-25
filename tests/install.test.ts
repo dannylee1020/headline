@@ -6,14 +6,14 @@ import { installOpenCode, OpenCodeInstallError } from "../src/adapters/opencode/
 import { installPi, piInstallArgs } from "../src/adapters/pi/install.js";
 
 async function tempRoot(): Promise<string> {
-  return mkdtemp(join(tmpdir(), "newsbar-installer-"));
+  return mkdtemp(join(tmpdir(), "headline-installer-"));
 }
 
 describe("OpenCode installer", () => {
   it("preserves JSONC comments and unrelated plugin entries", async () => {
     const root = await tempRoot();
     const configPath = join(root, "tui.json");
-    const pluginPath = join(root, "newsbar", "dist", "adapters", "opencode", "index.js");
+    const pluginPath = join(root, "headline", "dist", "adapters", "opencode", "index.js");
     await writeFile(configPath, '{\n  // preserved\n  "$schema": "https://opencode.ai/tui.json",\n  "plugin": ["other",],\n}\n');
     const result = await installOpenCode({ configPath, pluginPath });
     const output = await readFile(configPath, "utf8");
@@ -21,7 +21,7 @@ describe("OpenCode installer", () => {
     expect(output).toContain("// preserved");
     expect(output).toContain('"other"');
     expect(output).toContain(pluginPath);
-    expect(await readFile(`${configPath}.newsbar.bak`, "utf8")).toContain('"other"');
+    expect(await readFile(`${configPath}.headline.bak`, "utf8")).toContain('"other"');
     expect((await installOpenCode({ configPath, pluginPath })).changed).toBe(false);
   });
 
@@ -36,11 +36,11 @@ describe("OpenCode installer", () => {
 
 describe("Pi installer contract", () => {
   it("uses global scope by default and -l only when requested", () => {
-    expect(piInstallArgs({ installPath: "/tmp/newsbar" })).toEqual(["install", "/tmp/newsbar"]);
-    expect(piInstallArgs({ installPath: "/tmp/newsbar", project: true })).toEqual(["install", "-l", "/tmp/newsbar"]);
+    expect(piInstallArgs({ installPath: "/tmp/headline" })).toEqual(["install", "/tmp/headline"]);
+    expect(piInstallArgs({ installPath: "/tmp/headline", project: true })).toEqual(["install", "-l", "/tmp/headline"]);
   });
 
   it("captures a failed Pi command", async () => {
-    await expect(installPi({ installPath: "/tmp/newsbar", command: "/usr/bin/false" })).rejects.toThrow(/pi install failed/);
+    await expect(installPi({ installPath: "/tmp/headline", command: "/usr/bin/false" })).rejects.toThrow(/pi install failed/);
   });
 });

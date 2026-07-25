@@ -1,14 +1,15 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
-import { formatLinkedHeadline } from "../../core/format.js";
+import { displaySegments, HEADLINE_BULLET, terminalHyperlink } from "../../core/format.js";
 import { refreshFeeds } from "../../core/fetch-feeds.js";
 import { NewsController } from "../../runtime/news-controller.js";
-import { MemoryCache } from "../../runtime/memory-cache.js";
+import { FileSnapshotCache } from "../../runtime/file-cache.js";
+import { FileRefreshCoordinator } from "../../runtime/refresh-coordinator.js";
 
-const STATUS_KEY = "newsbar";
+const STATUS_KEY = "headline";
 
-export default function newsbarExtension(pi: ExtensionAPI): void {
+export default function headlineExtension(pi: ExtensionAPI): void {
   let controller: NewsController | undefined;
   let updateStatus = (): void => {};
   let taskActive = false;
@@ -21,7 +22,8 @@ export default function newsbarExtension(pi: ExtensionAPI): void {
     const config = loaded.config;
     visibility = config.visibility;
     taskActive = false;
-    const cache = new MemoryCache();
+    const cache = new FileSnapshotCache();
+    const coordinator = new FileRefreshCoordinator();
     updateStatus = () => {
       const visible = visibility === "always" || (visibility === "working" && taskActive);
       try {
@@ -30,12 +32,11 @@ export default function newsbarExtension(pi: ExtensionAPI): void {
           return;
         }
         const headline = controller?.getHeadline();
-        const line = headline
-          ? formatLinkedHeadline(headline)
-          : controller?.getSnapshot()
-            ? "Headlines unavailable"
-            : "Loading headlines…";
-        ctx.ui.setStatus(STATUS_KEY, ctx.ui.theme.fg("dim", line));
+        const segments = displaySegments(headline);
+        const line = segments
+          ? `${ctx.ui.theme.fg("accent", HEADLINE_BULLET)} ${ctx.ui.theme.fg("dim", `${segments.source} · `)}${ctx.ui.theme.fg("muted", terminalHyperlink(segments.title, segments.url))}`
+          : ctx.ui.theme.fg("dim", controller?.getSnapshot() ? `${HEADLINE_BULLET} headlines unavailable` : `${HEADLINE_BULLET} loading headlines…`);
+        ctx.ui.setStatus(STATUS_KEY, line);
       } catch {
         // Host rendering must never affect agent execution.
       }
@@ -45,9 +46,10 @@ export default function newsbarExtension(pi: ExtensionAPI): void {
       controller = new NewsController({
         cache,
         intervalMs: config.intervalMs,
-        feedTtlMs: config.feedTtlMs,
+        refreshIntervalMs: config.refreshIntervalMs,
         maxItems: config.maxItems,
         filters: config,
+        coordinateRefresh: (refresh) => coordinator.run(refresh),
         refresh: (signal) => refreshFeeds(sourcesForConfig(config), controller?.getSnapshot(), {
           signal,
           timeoutMs: config.timeoutMs,

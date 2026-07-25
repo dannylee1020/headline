@@ -1,8 +1,11 @@
-export type Category = "tech" | "finance" | "general";
+export type Category = string;
 export type CategoryFilter = Category | "all";
 
 export interface NewsSource {
+  /** Stable identifier for this concrete feed endpoint. */
   readonly id: string;
+  /** Logical publisher identifier shared by the publisher's category feeds. */
+  readonly providerId: string;
   readonly name: string;
   readonly category: Category;
   readonly url: string;
@@ -14,6 +17,7 @@ export interface Headline {
   readonly title: string;
   readonly url: string;
   readonly sourceId: string;
+  readonly providerId: string;
   readonly sourceName: string;
   readonly category: Category;
   readonly publishedAt?: number;
@@ -102,8 +106,9 @@ export interface ControllerOptions {
   readonly clock?: Clock;
   readonly scheduler?: TimerScheduler;
   readonly refresh: (signal: AbortSignal) => Promise<RefreshResult>;
+  readonly coordinateRefresh?: (refresh: () => Promise<RefreshResult>) => Promise<RefreshResult | undefined>;
   readonly intervalMs?: number;
-  readonly feedTtlMs?: number;
+  readonly refreshIntervalMs?: number;
   readonly maxItems?: number;
   readonly filters?: NewsFilters;
   readonly onInvalidate: () => void;

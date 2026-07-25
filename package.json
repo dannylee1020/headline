@@ -1,11 +1,11 @@
 {
-  "name": "newsbar",
+  "name": "headline",
   "version": "0.0.0",
   "private": true,
   "description": "Rotating RSS headlines for Claude Code, OpenCode, and Pi.",
   "type": "module",
   "bin": {
-    "newsbar": "./dist/cli/index.js"
+    "headline": "./dist/cli/index.js"
   },
   "exports": {
     ".": {

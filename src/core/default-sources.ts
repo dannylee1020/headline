@@ -1,48 +1,96 @@
-import type { NewsbarConfig } from "./config.js";
+import type { HeadlineConfig } from "./config.js";
 import type { NewsSource } from "./types.js";
 
+function feed(
+  providerId: string,
+  name: string,
+  category: string,
+  url: string,
+): NewsSource {
+  return { id: `${providerId}:${category}`, providerId, name, category, url };
+}
+
+/**
+ * First-party RSS endpoints. A provider may expose several category feeds;
+ * configuration selects the concrete endpoints from this registry.
+ */
 export const DEFAULT_SOURCES: readonly NewsSource[] = [
-  {
-    id: "hacker-news",
-    name: "Hacker News",
-    category: "tech",
-    url: "https://news.ycombinator.com/rss",
-  },
-  {
-    id: "techcrunch",
-    name: "TechCrunch",
-    category: "tech",
-    url: "https://techcrunch.com/feed/",
-  },
-  {
-    id: "yahoo-finance",
-    name: "Yahoo Finance",
-    category: "finance",
-    url: "https://finance.yahoo.com/news/rssindex",
-  },
-  {
-    id: "npr",
-    name: "NPR",
-    category: "general",
-    url: "https://feeds.npr.org/1001/rss.xml",
-  },
+  feed("axios", "Axios", "general", "https://api.axios.com/feed/"),
+
+  feed("bbc", "BBC", "general", "https://feeds.bbci.co.uk/news/rss.xml"),
+  feed("bbc", "BBC", "world", "https://feeds.bbci.co.uk/news/world/rss.xml"),
+  feed("bbc", "BBC", "uk", "https://feeds.bbci.co.uk/news/uk/rss.xml"),
+  feed("bbc", "BBC", "business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
+  feed("bbc", "BBC", "politics", "https://feeds.bbci.co.uk/news/politics/rss.xml"),
+  feed("bbc", "BBC", "technology", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
+  feed("bbc", "BBC", "health", "https://feeds.bbci.co.uk/news/health/rss.xml"),
+  feed("bbc", "BBC", "education", "https://feeds.bbci.co.uk/news/education/rss.xml"),
+  feed("bbc", "BBC", "science", "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"),
+  feed("bbc", "BBC", "entertainment", "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml"),
+  feed("bbc", "BBC", "sports", "https://feeds.bbci.co.uk/sport/rss.xml"),
+
+  feed("npr", "NPR", "general", "https://feeds.npr.org/1001/rss.xml"),
+  feed("npr", "NPR", "national", "https://feeds.npr.org/1003/rss.xml"),
+  feed("npr", "NPR", "world", "https://feeds.npr.org/1004/rss.xml"),
+  feed("npr", "NPR", "politics", "https://feeds.npr.org/1014/rss.xml"),
+  feed("npr", "NPR", "business", "https://feeds.npr.org/1006/rss.xml"),
+  feed("npr", "NPR", "economy", "https://feeds.npr.org/1017/rss.xml"),
+  feed("npr", "NPR", "technology", "https://feeds.npr.org/1019/rss.xml"),
+  feed("npr", "NPR", "health", "https://feeds.npr.org/1128/rss.xml"),
+  feed("npr", "NPR", "science", "https://feeds.npr.org/1007/rss.xml"),
+  feed("npr", "NPR", "education", "https://feeds.npr.org/1013/rss.xml"),
+  feed("npr", "NPR", "climate", "https://feeds.npr.org/1167/rss.xml"),
+  feed("npr", "NPR", "culture", "https://feeds.npr.org/1008/rss.xml"),
+  feed("npr", "NPR", "sports", "https://feeds.npr.org/1055/rss.xml"),
+
+  feed("yahoo-finance", "Yahoo Finance", "finance", "https://finance.yahoo.com/news/rssindex"),
 ];
 
-export function sourcesForConfig(config: Pick<NewsbarConfig, "providers" | "categories">): readonly NewsSource[] {
-  const providers = new Set<string>(config.providers);
+export const DEFAULT_PROVIDER_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.providerId))];
+export const SUPPORTED_CATEGORY_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.category))];
+
+/** The quiet default keeps the original four-feed request shape. */
+export const DEFAULT_CATEGORIES: readonly string[] = ["general", "finance"];
+
+export interface SourceCapability {
+  readonly providerId: string;
+  readonly name: string;
+  readonly categories: readonly string[];
+}
+
+export function sourceCapabilities(sources: readonly NewsSource[] = DEFAULT_SOURCES): readonly SourceCapability[] {
+  const byProvider = new Map<string, { name: string; categories: string[] }>();
+  for (const source of sources) {
+    const existing = byProvider.get(source.providerId);
+    if (existing) {
+      if (!existing.categories.includes(source.category)) existing.categories.push(source.category);
+      continue;
+    }
+    byProvider.set(source.providerId, { name: source.name, categories: [source.category] });
+  }
+  return [...byProvider].map(([providerId, value]) => ({
+    providerId,
+    name: value.name,
+    categories: value.categories,
+  }));
+}
+
+export function sourcesForConfig(config: Pick<HeadlineConfig, "providers" | "categories">): readonly NewsSource[] {
+  const providers = new Set(config.providers);
   const categories = new Set(config.categories);
-  return DEFAULT_SOURCES.filter((source) => providers.has(source.id) && categories.has(source.category));
+  return DEFAULT_SOURCES.filter((source) => providers.has(source.providerId) && categories.has(source.category));
 }
 
 export function assertDefaultSources(sources: readonly NewsSource[] = DEFAULT_SOURCES): void {
-  const expected = [
-    ["hacker-news", "tech", "https://news.ycombinator.com/rss"],
-    ["techcrunch", "tech", "https://techcrunch.com/feed/"],
-    ["yahoo-finance", "finance", "https://finance.yahoo.com/news/rssindex"],
-    ["npr", "general", "https://feeds.npr.org/1001/rss.xml"],
-  ];
-  const actual = sources.map((source) => [source.id, source.category, source.url]);
-  if (JSON.stringify(actual) !== JSON.stringify(expected) || sources.some((source) => /google news/i.test(source.name + source.url))) {
-    throw new Error("Newsbar source registry must contain exactly the four approved RSS sources");
+  const ids = new Set<string>();
+  for (const source of sources) {
+    if (ids.has(source.id) || source.id !== `${source.providerId}:${source.category}` || !/^https?:\/\//u.test(source.url)) {
+      throw new Error("Headline source registry contains an invalid or duplicate feed");
+    }
+    ids.add(source.id);
+  }
+  const required = ["axios:general", "bbc:general", "bbc:technology", "bbc:sports", "npr:general", "npr:technology", "npr:sports", "yahoo-finance:finance"];
+  if (required.some((id) => !ids.has(id)) || sources.some((source) => /google news/i.test(source.name + source.url))) {
+    throw new Error("Headline source registry is missing an approved first-party feed");
   }
 }

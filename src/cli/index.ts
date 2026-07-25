@@ -5,7 +5,10 @@ import { installOpenCode } from "../adapters/opencode/install.js";
 import { installPi } from "../adapters/pi/install.js";
 import { parseJsonInput, runLifecycle, runRefreshWorker, runStatus } from "../adapters/claude/runtime.js";
 import { configSummary, loadConfig } from "../core/config.js";
-import { cacheRoot } from "../runtime/file-cache.js";
+import { sourceCapabilities } from "../core/default-sources.js";
+import { FileSnapshotCache, cacheRoot } from "../runtime/file-cache.js";
+import { headlinePaths } from "../runtime/paths.js";
+import { refreshNews } from "../runtime/refresh-service.js";
 
 function option(argv: readonly string[], name: string): string | undefined {
   const index = argv.indexOf(name);
@@ -13,7 +16,7 @@ function option(argv: readonly string[], name: string): string | undefined {
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<number> {
-  if (argv[0] === "--newsbar") argv = argv.slice(1);
+  if (argv[0] === "--headline") argv = argv.slice(1);
   try {
     if (argv[0] === "claude" && argv[1] === "lifecycle" && (argv[2] === "active" || argv[2] === "idle")) {
       await runLifecycle(argv[2], await parseJsonInput());
@@ -29,8 +32,12 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
       return 0;
     }
     if (argv[0] === "install" && argv[1] === "claude") {
-      const result = await installClaude({ force: argv.includes("--force") });
-      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Newsbar Claude integration at ${result.settingsPath}\nBackup: ${result.backupPath}\n`);
+      const launcherPath = option(argv, "--launcher");
+      const result = await installClaude({
+        force: argv.includes("--force"),
+        ...(launcherPath ? { commandPath: launcherPath } : {}),
+      });
+      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline Claude integration at ${result.settingsPath}\nBackup: ${result.backupPath}\n`);
       return 0;
     }
     if (argv[0] === "install" && argv[1] === "opencode") {
@@ -41,26 +48,56 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         pluginPath,
         ...(configPath ? { configPath } : {}),
       });
-      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Newsbar OpenCode TUI plugin at ${result.configPath}\nBackup: ${result.backupPath}\n`);
+      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline OpenCode TUI plugin at ${result.configPath}\nBackup: ${result.backupPath}\n`);
       return 0;
     }
     if (argv[0] === "install" && argv[1] === "pi") {
       const installPath = option(argv, "--path");
       if (!installPath) throw new Error("install pi requires --path");
       await installPi({ installPath, project: argv.includes("--project") });
-      process.stdout.write(`Installed Newsbar Pi package from ${installPath}\n`);
+      process.stdout.write(`Installed Headline Pi package from ${installPath}\n`);
+      return 0;
+    }
+    if (argv[0] === "sources") {
+      for (const capability of sourceCapabilities()) {
+        process.stdout.write(`${capability.providerId}: ${capability.categories.join(", ")}\n`);
+      }
+      return 0;
+    }
+    if (argv[0] === "config" && argv[1] === "path") {
+      process.stdout.write(`${headlinePaths().config}\n`);
+      return 0;
+    }
+    if (argv[0] === "config" && argv[1] === "show") {
+      const loaded = await loadConfig();
+      process.stdout.write(`${JSON.stringify(configSummary(loaded.config), null, 2)}\n`);
+      if (loaded.errors.length) {
+        process.stderr.write(`${loaded.errors.join("\n")}\n`);
+        return 1;
+      }
+      return 0;
+    }
+    if (argv[0] === "refresh") {
+      const refreshed = await refreshNews();
+      process.stdout.write(`${refreshed ? "Refreshed Headline cache" : "Refresh skipped; another refresh is already running or Headline is off"}\n`);
+      return 0;
+    }
+    if (argv[0] === "cache" && argv[1] === "clear") {
+      await new FileSnapshotCache().clear();
+      process.stdout.write(`Cleared Headline cache at ${cacheRoot()}\n`);
       return 0;
     }
     if (argv[0] === "doctor") {
       const loaded = await loadConfig();
-      process.stdout.write(`Newsbar cache: ${cacheRoot()}\nNode: ${process.version}\nNewsbar config: ${loaded.path}\nEffective config: ${JSON.stringify(configSummary(loaded.config))}\n`);
+      const paths = headlinePaths();
+      process.stdout.write(`Headline home: ${paths.home}\nHeadline app: ${paths.app}\nHeadline launcher: ${paths.launcher}\nHeadline cache: ${cacheRoot()}\nHeadline state: ${paths.state}\nLegacy app: ${paths.legacyApp}\nLegacy config: ${paths.legacyConfig}\nLegacy cache: ${paths.legacyCache}\nNode: ${process.version}\nHeadline config: ${loaded.path}\nEffective config: ${JSON.stringify(configSummary(loaded.config))}\n`);
       if (loaded.errors.length) {
         process.stdout.write(`Config errors:\n${loaded.errors.map((error) => `- ${error}`).join("\n")}\n`);
         return 1;
       }
       return 0;
     }
-    process.stderr.write("Usage: newsbar install claude [--force] | install opencode --plugin-path PATH [--config PATH] | install pi --path PATH [--project] | newsbar claude status|lifecycle active|idle|refresh-worker | newsbar doctor\n");
+    process.stderr.write("Usage: headline install claude [--force] | install opencode --plugin-path PATH [--config PATH] | install pi --path PATH [--project] | headline claude status|lifecycle active|idle|refresh-worker | headline sources | headline config path|show | headline refresh | headline cache clear | headline doctor\n");
     return 2;
   } catch (error) {
     if (argv[0] === "claude") return 0;

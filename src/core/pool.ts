@@ -20,6 +20,23 @@ function deduplicate(headlines: readonly Headline[]): Headline[] {
   return result;
 }
 
+function deduplicatePreferSpecific(headlines: readonly Headline[]): Headline[] {
+  const result: Headline[] = [];
+  const indexes = new Map<string, number>();
+  for (const headline of headlines) {
+    const key = canonicalUrl(headline.url);
+    const existingIndex = indexes.get(key);
+    if (existingIndex === undefined) {
+      indexes.set(key, result.length);
+      result.push(headline);
+      continue;
+    }
+    const existing = result[existingIndex]!;
+    if (existing.category === "general" && headline.category !== "general") result[existingIndex] = headline;
+  }
+  return result;
+}
+
 function roundRobin(groups: readonly (readonly Headline[])[]): Headline[] {
   const output: Headline[] = [];
   const indexes = groups.map(() => 0);
@@ -39,23 +56,35 @@ function roundRobin(groups: readonly (readonly Headline[])[]): Headline[] {
   return output;
 }
 
+function providerIdOf(sourceId: string, providerId: string | undefined): string {
+  return providerId ?? sourceId.split(":", 1)[0]!;
+}
+
 export function buildPool(snapshot: NewsSnapshot, maxItems = 20, filters: NewsFilters = {}): readonly Headline[] {
   const providers = filters.providers?.length ? new Set(filters.providers) : undefined;
   const categories = filters.categories?.length ? new Set(filters.categories) : undefined;
-  const bySource = new Map<string, Headline[]>();
+  const byCategory = new Map<string, Map<string, Headline[][]>>();
+
   for (const sourceSnapshot of snapshot.sources) {
-    if (providers && !providers.has(sourceSnapshot.source.id)) continue;
-    if (categories && !categories.has(sourceSnapshot.source.category)) continue;
+    const source = sourceSnapshot.source;
+    const providerId = providerIdOf(source.id, source.providerId);
+    if (providers && !providers.has(providerId)) continue;
+    if (categories && !categories.has(source.category)) continue;
+
     const items = deduplicate([...sourceSnapshot.headlines].sort(newestFirst)).slice(0, maxItems);
-    bySource.set(sourceSnapshot.source.id, items);
+    const byProvider = byCategory.get(source.category) ?? new Map<string, Headline[][]>();
+    const feeds = byProvider.get(providerId) ?? [];
+    feeds.push(items);
+    byProvider.set(providerId, feeds);
+    byCategory.set(source.category, byProvider);
   }
-  const tech = roundRobin([
-    bySource.get("hacker-news") ?? [],
-    bySource.get("techcrunch") ?? [],
-  ]);
-  const finance = bySource.get("yahoo-finance") ?? [];
-  const general = bySource.get("npr") ?? [];
-  return roundRobin([tech, finance, general]);
+
+  const categoryPools: Headline[][] = [];
+  for (const byProvider of byCategory.values()) {
+    const providerPools = [...byProvider.values()].map((feeds) => roundRobin(feeds));
+    categoryPools.push(roundRobin(providerPools));
+  }
+  return deduplicatePreferSpecific(roundRobin(categoryPools));
 }
 
 export function filterPool(pool: readonly Headline[], category: CategoryFilter): readonly Headline[] {

@@ -1,23 +1,26 @@
 #!/bin/sh
-# Newsbar source-build installer.
-# Usage: curl -fsSL https://raw.githubusercontent.com/dannylee1020/newsbar/main/install.sh | sh
+# Headline source-build installer.
+# Usage: curl -fsSL https://raw.githubusercontent.com/dannylee1020/headline/main/install.sh | sh
 set -u
 
-REPOSITORY=${NEWSBAR_REPOSITORY:-dannylee1020/newsbar}
-REF=${NEWSBAR_REF:-main}
-REF_TYPE=${NEWSBAR_REF_TYPE:-heads}
-ARCHIVE_URL=${NEWSBAR_ARCHIVE_URL:-}
+REPOSITORY=${HEADLINE_REPOSITORY:-dannylee1020/headline}
+REF=${HEADLINE_REF:-main}
+REF_TYPE=${HEADLINE_REF_TYPE:-heads}
+ARCHIVE_URL=${HEADLINE_ARCHIVE_URL:-}
 HOME_DIR=${HOME:-}
-DATA_HOME=${XDG_DATA_HOME:-$HOME_DIR}
-INSTALL_DIR=${NEWSBAR_INSTALL_DIR:-${DATA_HOME:+$DATA_HOME/newsbar}}
-INSTALL_DIR=${INSTALL_DIR:-$HOME_DIR/.local/share/newsbar}
-DRY_RUN=${NEWSBAR_DRY_RUN:-0}
-REQUESTED_HOSTS=${NEWSBAR_INSTALL_HOSTS:-}
-CLAUDE_FORCE=${NEWSBAR_CLAUDE_FORCE:-0}
-PI_PROJECT=${NEWSBAR_PI_PROJECT:-0}
+HEADLINE_HOME=${HEADLINE_HOME:-${HOME_DIR:+$HOME_DIR/.headline}}
+INSTALL_DIR=${HEADLINE_INSTALL_DIR:-${HEADLINE_HOME:+$HEADLINE_HOME/app}}
+INSTALL_DIR=${INSTALL_DIR:-$HOME_DIR/.headline/app}
+LAUNCHER_PATH=${HEADLINE_HOME:+$HEADLINE_HOME/bin/headline}
+LAUNCHER_PATH=${LAUNCHER_PATH:-$HOME_DIR/.headline/bin/headline}
+DRY_RUN=${HEADLINE_DRY_RUN:-0}
+REQUESTED_HOSTS=${HEADLINE_INSTALL_HOSTS:-}
+CLAUDE_FORCE=${HEADLINE_CLAUDE_FORCE:-0}
+PI_PROJECT=${HEADLINE_PI_PROJECT:-0}
 
 work_dir=
 current_ready=
+launcher_tmp=
 claude_cmd=
 opencode_cmd=
 pi_cmd=
@@ -33,8 +36,13 @@ unsupported_hosts=
 say() {
   printf '%s\n' "$*"
 }
+shell_quote() {
+  value=$1
+  value=$(printf '%s' "$value" | sed "s/'/'\\\\''/g")
+  printf "'%s'" "$value"
+}
 warn() {
-  printf 'newsbar installer: %s\n' "$*" >&2
+  printf 'headline installer: %s\n' "$*" >&2
 }
 fail() {
   warn "$*"
@@ -48,6 +56,9 @@ abort_install() {
 cleanup() {
   if [ -n "${work_dir:-}" ] && [ -d "$work_dir" ]; then
     rm -rf "$work_dir"
+  fi
+  if [ -n "${launcher_tmp:-}" ] && [ -e "$launcher_tmp" ]; then
+    rm -f "$launcher_tmp"
   fi
 }
 trap cleanup EXIT HUP INT TERM
@@ -97,13 +108,18 @@ record_unsupported() {
 
 validate_paths() {
   [ -n "$HOME_DIR" ] || fail "HOME must be set for a user-local installation"
-  case "$INSTALL_DIR" in
-    ""|/|"$HOME_DIR"|.) fail "NEWSBAR_INSTALL_DIR must be a dedicated user-local directory" ;;
+  case "$HEADLINE_HOME" in
+    ""|/|"$HOME_DIR"|.) fail "HEADLINE_HOME must be a dedicated user-local directory" ;;
     /*) ;;
-    *) fail "NEWSBAR_INSTALL_DIR must be an absolute path: $INSTALL_DIR" ;;
+    *) fail "HEADLINE_HOME must be an absolute path: $HEADLINE_HOME" ;;
+  esac
+  case "$INSTALL_DIR" in
+    ""|/|"$HOME_DIR"|.) fail "HEADLINE_INSTALL_DIR must be a dedicated user-local directory" ;;
+    /*) ;;
+    *) fail "HEADLINE_INSTALL_DIR must be an absolute path: $INSTALL_DIR" ;;
   esac
   if [ "$INSTALL_DIR" = "$PWD" ]; then
-    fail "NEWSBAR_INSTALL_DIR must not be the current working directory"
+    fail "HEADLINE_INSTALL_DIR must not be the current working directory"
   fi
 }
 
@@ -138,7 +154,7 @@ detect_hosts() {
     else
       unsupported_count=$((unsupported_count + 1))
       unsupported_hosts="${unsupported_hosts}${unsupported_hosts:+, }OpenCode ${opencode_version:-unknown} (<1.18.4)"
-      warn "OpenCode ${opencode_version:-unknown} is unsupported; Newsbar requires >=1.18.4"
+      warn "OpenCode ${opencode_version:-unknown} is unsupported; Headline requires >=1.18.4"
       opencode_cmd=
     fi
   elif requested_host opencode; then
@@ -154,7 +170,7 @@ detect_hosts() {
     else
       unsupported_count=$((unsupported_count + 1))
       unsupported_hosts="${unsupported_hosts}${unsupported_hosts:+, }Pi ${pi_version:-unknown} (<0.81.1)"
-      warn "Pi ${pi_version:-unknown} is unsupported; Newsbar requires >=0.81.1"
+      warn "Pi ${pi_version:-unknown} is unsupported; Headline requires >=0.81.1"
       pi_cmd=
     fi
   elif requested_host pi; then
@@ -166,12 +182,12 @@ archive_url() {
   if [ -n "$ARCHIVE_URL" ]; then
     case "$ARCHIVE_URL" in
       https://*) printf '%s' "$ARCHIVE_URL" ;;
-      *) abort_install "NEWSBAR_ARCHIVE_URL must use HTTPS" ;;
+      *) abort_install "HEADLINE_ARCHIVE_URL must use HTTPS" ;;
     esac
   else
     case "$REF_TYPE" in
       heads|tags) ;;
-      *) abort_install "NEWSBAR_REF_TYPE must be heads or tags" ;;
+      *) abort_install "HEADLINE_REF_TYPE must be heads or tags" ;;
     esac
     printf 'https://codeload.github.com/%s/tar.gz/refs/%s/%s' "$REPOSITORY" "$REF_TYPE" "$REF"
   fi
@@ -180,7 +196,7 @@ archive_url() {
 build_staging() {
   parent=$(dirname "$INSTALL_DIR")
   mkdir -p "$parent" || abort_install "cannot create install parent: $parent"
-  work_dir="$parent/.newsbar-work.$$"
+  work_dir="$parent/.headline-work.$$"
   if [ -e "$work_dir" ]; then abort_install "staging path already exists: $work_dir"; fi
   mkdir -p "$work_dir/extracted" || abort_install "cannot create staging directory"
   archive="$work_dir/source.tar.gz"
@@ -201,16 +217,16 @@ build_staging() {
   [ -f "$source_root/tsconfig.build.json" ] || abort_install "source archive did not contain the build configuration"
   [ -f "$source_root/install.sh" ] || abort_install "source archive did not contain install.sh"
 
-  warn "Installing locked dependencies and building Newsbar"
+  warn "Installing locked dependencies and building Headline"
   (cd "$source_root" && npm ci --no-audit --no-fund && npm run build) || abort_install "source build failed; existing install was not changed"
-  [ -f "$source_root/dist/cli/index.js" ] || abort_install "build did not produce the Newsbar CLI"
+  [ -f "$source_root/dist/cli/index.js" ] || abort_install "build did not produce the Headline CLI"
   [ -f "$source_root/dist/adapters/pi/index.js" ] || abort_install "build did not produce the Pi adapter"
   [ -f "$source_root/dist/adapters/opencode/index.js" ] || abort_install "build did not produce the OpenCode adapter"
   node --input-type=module -e 'await import(process.argv[1]); await import(process.argv[2]); await import(process.argv[3])' \
     "$source_root/dist/cli/index.js" "$source_root/dist/adapters/pi/index.js" "$source_root/dist/adapters/opencode/index.js" \
     || abort_install "built adapter entrypoint import failed"
 
-  current_ready="$parent/.newsbar-ready.$$"
+  current_ready="$parent/.headline-ready.$$"
   if [ -e "$current_ready" ]; then abort_install "ready path already exists: $current_ready"; fi
   mv "$source_root" "$current_ready" || abort_install "cannot prepare built install"
 }
@@ -222,7 +238,7 @@ promote() {
   fi
   if mv "$current_ready" "$INSTALL_DIR"; then
     current_ready=
-    say "Installed Newsbar source tree at $INSTALL_DIR"
+    say "Installed Headline application at $INSTALL_DIR"
     if [ -e "$backup_path" ]; then say "Previous install preserved at $backup_path"; fi
   else
     if [ -e "$backup_path" ]; then mv "$backup_path" "$INSTALL_DIR" 2>/dev/null || true; fi
@@ -230,21 +246,37 @@ promote() {
   fi
 }
 
+write_launcher() {
+  launcher_parent=$(dirname "$LAUNCHER_PATH")
+  mkdir -p "$launcher_parent" || abort_install "cannot create launcher directory: $launcher_parent"
+  launcher_tmp="$LAUNCHER_PATH.$$"
+  node_path=$(command -v node)
+  cli_path="$INSTALL_DIR/dist/cli/index.js"
+  {
+    printf '#!/bin/sh\n'
+    printf 'exec %s %s "\$@"\n' "$(shell_quote "$node_path")" "$(shell_quote "$cli_path")"
+  } > "$launcher_tmp" || abort_install "cannot write launcher: $LAUNCHER_PATH"
+  chmod 755 "$launcher_tmp" || abort_install "cannot make launcher executable: $LAUNCHER_PATH"
+  mv -f "$launcher_tmp" "$LAUNCHER_PATH" || abort_install "cannot install launcher: $LAUNCHER_PATH"
+  launcher_tmp=
+  say "Installed Headline CLI launcher at $LAUNCHER_PATH"
+}
+
 install_claude() {
   say "Installing Claude Code integration"
   if [ "$CLAUDE_FORCE" = "1" ] || [ "$CLAUDE_FORCE" = "true" ]; then
-    NEWSBAR_CLAUDE_FORCE=1
-    if [ -n "${NEWSBAR_CLAUDE_SETTINGS:-}" ]; then NEWSBAR_CLAUDE_SETTINGS="$NEWSBAR_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude --force; else node "$INSTALL_DIR/dist/cli/index.js" install claude --force; fi
+    HEADLINE_CLAUDE_FORCE=1
+    if [ -n "${HEADLINE_CLAUDE_SETTINGS:-}" ]; then HEADLINE_CLAUDE_SETTINGS="$HEADLINE_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude --force --launcher "$LAUNCHER_PATH"; else node "$INSTALL_DIR/dist/cli/index.js" install claude --force --launcher "$LAUNCHER_PATH"; fi
   else
-    if [ -n "${NEWSBAR_CLAUDE_SETTINGS:-}" ]; then NEWSBAR_CLAUDE_SETTINGS="$NEWSBAR_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude; else node "$INSTALL_DIR/dist/cli/index.js" install claude; fi
+    if [ -n "${HEADLINE_CLAUDE_SETTINGS:-}" ]; then HEADLINE_CLAUDE_SETTINGS="$HEADLINE_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"; else node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"; fi
   fi
 }
 
 install_opencode() {
   say "Installing OpenCode TUI integration"
   plugin_path="$INSTALL_DIR/dist/adapters/opencode/index.js"
-  if [ -n "${NEWSBAR_OPENCODE_CONFIG:-}" ]; then
-    node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$plugin_path" --config "$NEWSBAR_OPENCODE_CONFIG"
+  if [ -n "${HEADLINE_OPENCODE_CONFIG:-}" ]; then
+    node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$plugin_path" --config "$HEADLINE_OPENCODE_CONFIG"
   else
     node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$plugin_path"
   fi
@@ -282,23 +314,24 @@ if [ "$detected_count" -eq 0 ]; then
 fi
 
 if [ "$DRY_RUN" = "1" ] || [ "$DRY_RUN" = "true" ]; then
-  say "Dry run: would build at $INSTALL_DIR and install detected hosts."
+  say "Dry run: would build at $INSTALL_DIR, create $LAUNCHER_PATH, and install detected hosts."
   exit 0
 fi
 
 build_staging
 promote
+write_launcher
 run_hosts
 
 say ""
-say "Newsbar installation summary"
+say "Headline installation summary"
 say "  detected/compatible: $detected_count"
 say "  installed: ${installed_hosts:-none}"
 say "  unsupported: ${unsupported_hosts:-none}"
 say "  failed: ${failed_hosts:-none}"
 if [ "$failed_count" -gt 0 ]; then
-  say "One or more detected integrations failed. The source tree is installed; rerun after fixing the reported host issue."
+  say "One or more detected integrations failed. The Headline application is installed; rerun after fixing the reported host issue."
   exit 1
 fi
-say "All detected Newsbar integrations installed successfully."
+say "All detected Headline integrations installed successfully."
 exit 0

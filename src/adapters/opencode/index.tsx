@@ -1,13 +1,14 @@
 /** @jsxImportSource @opentui/solid */
-import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui";
+import type { TuiPlugin, TuiPluginModule, TuiThemeCurrent } from "@opencode-ai/plugin/tui";
 import { StyledText, type TextChunk } from "@opentui/core";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
-import { displaySegments } from "../../core/format.js";
+import { displaySegments, HEADLINE_BULLET } from "../../core/format.js";
 import { refreshFeeds } from "../../core/fetch-feeds.js";
 import { NewsController } from "../../runtime/news-controller.js";
 import type { Headline } from "../../core/types.js";
-import { MemoryCache } from "../../runtime/memory-cache.js";
+import { FileSnapshotCache } from "../../runtime/file-cache.js";
+import { FileRefreshCoordinator } from "../../runtime/refresh-coordinator.js";
 
 function crop(value: string, width: number): string {
   const safeWidth = Math.max(0, Math.floor(width));
@@ -16,23 +17,34 @@ function crop(value: string, width: number): string {
   return safeWidth === 1 ? "…" : `${value.slice(0, safeWidth - 1)}…`;
 }
 
-function linkedHeadline(headline: Headline | undefined, width: number): StyledText | undefined {
+function linkedHeadline(
+  headline: Headline | undefined,
+  width: number,
+  theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
+): StyledText | undefined {
   const segments = displaySegments(headline);
   if (!segments) return undefined;
-  const prefix = `${segments.source} · `;
+  const prefix = `${HEADLINE_BULLET} ${segments.source} · `;
   const title = crop(segments.title, Math.max(0, width - prefix.length));
   const titleChunk: TextChunk = {
     __isChunk: true,
     text: title,
+    fg: theme.textMuted,
     ...(segments.url ? { link: { url: segments.url } } : {}),
   };
-  return new StyledText([{ __isChunk: true, text: prefix }, titleChunk]);
+  return new StyledText([
+    { __isChunk: true, text: `${HEADLINE_BULLET} `, fg: theme.accent },
+    { __isChunk: true, text: segments.source, fg: theme.textMuted },
+    { __isChunk: true, text: " · ", fg: theme.textMuted },
+    titleChunk,
+  ]);
 }
 
 const tui: TuiPlugin = async (api) => {
   const config = (await loadConfig()).config;
   const sources = sourcesForConfig(config);
-  const cache = new MemoryCache();
+  const cache = new FileSnapshotCache();
+  const coordinator = new FileRefreshCoordinator();
   let controller: NewsController | undefined;
   let sessionId: string | undefined;
   let disposed = false;
@@ -55,9 +67,10 @@ const tui: TuiPlugin = async (api) => {
       controller = new NewsController({
         cache,
         intervalMs: config.intervalMs,
-        feedTtlMs: config.feedTtlMs,
+        refreshIntervalMs: config.refreshIntervalMs,
         maxItems: config.maxItems,
         filters: config,
+        coordinateRefresh: (refresh) => coordinator.run(refresh),
         refresh: (signal) => refreshFeeds(sources, controller?.getSnapshot(), {
           signal,
           timeoutMs: config.timeoutMs,
@@ -89,7 +102,7 @@ const tui: TuiPlugin = async (api) => {
     slots: {
       app_bottom: () => {
         sync();
-        const line = controller?.isActive() ? linkedHeadline(controller.getHeadline(), 240) : undefined;
+        const line = controller?.isActive() ? linkedHeadline(controller.getHeadline(), 240, api.theme.current) : undefined;
         if (!line) return <box />;
         return <text content={line} />;
       },
@@ -98,7 +111,7 @@ const tui: TuiPlugin = async (api) => {
 };
 
 const plugin: TuiPluginModule & { id: string } = {
-  id: "newsbar",
+  id: "headline",
   tui,
 };
 

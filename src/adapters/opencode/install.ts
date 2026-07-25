@@ -28,7 +28,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 }
 
 export function defaultOpenCodeConfigPath(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.NEWSBAR_OPENCODE_CONFIG) return env.NEWSBAR_OPENCODE_CONFIG;
+  if (env.HEADLINE_OPENCODE_CONFIG) return env.HEADLINE_OPENCODE_CONFIG;
   const configDir = env.OPENCODE_CONFIG_DIR ?? join(env.XDG_CONFIG_HOME ?? join(homedir(), ".config"), "opencode");
   return join(configDir, "tui.json");
 }
@@ -89,7 +89,7 @@ function parseConfig(text: string): Record<string, unknown> {
 export async function installOpenCode(options: OpenCodeInstallOptions): Promise<OpenCodeInstallResult> {
   const configPath = resolve(options.configPath ?? defaultOpenCodeConfigPath());
   const pluginPath = resolve(options.pluginPath);
-  const backupPath = `${configPath}.newsbar.bak`;
+  const backupPath = `${configPath}.headline.bak`;
   let text = "";
   let existed = true;
   try {

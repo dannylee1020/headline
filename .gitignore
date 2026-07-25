@@ -6,3 +6,4 @@ coverage/
 .kkt/
 memory/
 PRODUCT.md
+*.todo

@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { chmod, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { NewsSnapshot, SourceCache } from "../core/types.js";
+import { legacyCacheRoot, headlinePaths } from "./paths.js";
 
 const SCHEMA_VERSION = 1;
 const DEFAULT_ACTIVITY_TTL_MS = 24 * 60 * 60_000;
@@ -15,10 +16,8 @@ export interface FileCacheOptions {
 }
 
 export function cacheRoot(env: NodeJS.ProcessEnv = process.env): string {
-  if (env.NEWSBAR_CACHE_DIR) return env.NEWSBAR_CACHE_DIR;
-  if (env.XDG_CACHE_HOME) return join(env.XDG_CACHE_HOME, "newsbar");
-  if (process.platform === "win32" && env.LOCALAPPDATA) return join(env.LOCALAPPDATA, "newsbar");
-  return join(homedir(), ".cache", "newsbar");
+  if (env.HEADLINE_CACHE_DIR) return env.HEADLINE_CACHE_DIR;
+  return headlinePaths(env).cache;
 }
 
 function hash(value: string): string {
@@ -62,22 +61,36 @@ function isSnapshot(value: unknown): value is NewsSnapshot {
 
 export class FileSnapshotCache implements SourceCache {
   readonly root: string;
+  private readonly fallbackRoot: string | undefined;
 
   constructor(options: FileCacheOptions = {}) {
     this.root = options.root ?? cacheRoot();
+    this.fallbackRoot = options.root === undefined && !process.env.HEADLINE_CACHE_DIR ? legacyCacheRoot() : undefined;
   }
 
-  private get path(): string {
-    return join(this.root, "snapshot.json");
+  private path(root = this.root): string {
+    return join(root, "snapshot.json");
   }
 
   async read(): Promise<NewsSnapshot | undefined> {
-    const value = await readJson(this.path);
-    return isSnapshot(value) ? value : undefined;
+    for (const root of [this.root, this.fallbackRoot]) {
+      if (!root) continue;
+      const value = await readJson(this.path(root));
+      const snapshot = isSnapshot(value) ? value : undefined;
+      if (!snapshot) continue;
+      if (root !== this.root) await this.write(snapshot).catch(() => undefined);
+      return snapshot;
+    }
+    return undefined;
   }
 
   async write(snapshot: NewsSnapshot): Promise<void> {
-    await atomicJson(this.path, snapshot);
+    await atomicJson(this.path(), snapshot);
+  }
+
+  async clear(): Promise<void> {
+    await rm(this.path(), { force: true });
+    if (this.fallbackRoot) await rm(this.path(this.fallbackRoot), { force: true });
   }
 }
 
@@ -87,7 +100,7 @@ export class ActivityStore {
   private readonly claimTtlMs: number;
 
   constructor(options: FileCacheOptions = {}) {
-    this.root = options.root ?? cacheRoot();
+    this.root = options.root ?? process.env.HEADLINE_CACHE_DIR ?? headlinePaths().state;
     this.activityTtlMs = options.activityTtlMs ?? DEFAULT_ACTIVITY_TTL_MS;
     this.claimTtlMs = options.claimTtlMs ?? DEFAULT_CLAIM_TTL_MS;
   }
@@ -97,7 +110,7 @@ export class ActivityStore {
   }
 
   private get claimPath(): string {
-    return join(this.root, "refresh.claim");
+    return join(this.root, "refresh.lock");
   }
 
   async setActive(sessionId: string, active: boolean, now = Date.now()): Promise<void> {
@@ -149,5 +162,5 @@ export class ActivityStore {
 }
 
 export function temporaryCacheRoot(): string {
-  return join(tmpdir(), `newsbar-${process.pid}`);
+  return join(tmpdir(), `headline-${process.pid}`);
 }

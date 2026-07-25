@@ -1,4 +1,4 @@
-import { DEFAULT_FEED_TTL_MS, DEFAULT_INTERVAL_MS } from "../core/config.js";
+import { DEFAULT_INTERVAL_MS, DEFAULT_REFRESH_INTERVAL_MS } from "../core/config.js";
 import { buildPool, selectHeadline } from "../core/pool.js";
 import type { CategoryFilter, Clock, ControllerOptions, Headline, NewsSnapshot, TimerScheduler } from "../core/types.js";
 
@@ -13,13 +13,15 @@ export class NewsController {
   private readonly clock: Clock;
   private readonly scheduler: TimerScheduler;
   private readonly refreshFn: ControllerOptions["refresh"];
+  private readonly coordinateRefresh: ControllerOptions["coordinateRefresh"];
   private readonly intervalMs: number;
-  private readonly feedTtlMs: number;
+  private readonly refreshIntervalMs: number;
   private readonly maxItems: number;
   private readonly filters: ControllerOptions["filters"];
   private readonly onInvalidate: () => void;
   private snapshot: NewsSnapshot | undefined;
   private timer: unknown | undefined;
+  private refreshTimer: unknown | undefined;
   private request: Promise<void> | undefined;
   private abort: AbortController | undefined;
   private active = false;
@@ -31,8 +33,9 @@ export class NewsController {
     this.clock = options.clock ?? systemClock;
     this.scheduler = options.scheduler ?? systemScheduler;
     this.refreshFn = options.refresh;
+    this.coordinateRefresh = options.coordinateRefresh;
     this.intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
-    this.feedTtlMs = options.feedTtlMs ?? DEFAULT_FEED_TTL_MS;
+    this.refreshIntervalMs = options.refreshIntervalMs ?? DEFAULT_REFRESH_INTERVAL_MS;
     this.maxItems = options.maxItems ?? 20;
     this.filters = options.filters;
     this.onInvalidate = () => {
@@ -58,14 +61,10 @@ export class NewsController {
   }
 
   activate(): void {
-    if (this.disposed) return;
+    if (this.disposed || this.active) return;
     this.active = true;
-    if (this.timer === undefined) {
-      this.timer = this.scheduler.setInterval(() => {
-        this.safeInvalidate();
-        this.refreshIfNeeded();
-      }, this.intervalMs);
-    }
+    this.timer = this.scheduler.setInterval(() => this.safeInvalidate(), this.intervalMs);
+    this.refreshTimer = this.scheduler.setInterval(() => this.refreshIfNeeded(), this.refreshIntervalMs);
     this.safeInvalidate();
     void this.loadAndRefresh();
   }
@@ -79,6 +78,14 @@ export class NewsController {
         // Ignore host timer failures.
       }
       this.timer = undefined;
+    }
+    if (this.refreshTimer !== undefined) {
+      try {
+        this.scheduler.clearInterval(this.refreshTimer);
+      } catch {
+        // Ignore host timer failures.
+      }
+      this.refreshTimer = undefined;
     }
     this.safeInvalidate();
   }
@@ -95,6 +102,14 @@ export class NewsController {
         // Ignore host timer failures.
       }
       this.timer = undefined;
+    }
+    if (this.refreshTimer !== undefined) {
+      try {
+        this.scheduler.clearInterval(this.refreshTimer);
+      } catch {
+        // Ignore host timer failures.
+      }
+      this.refreshTimer = undefined;
     }
     this.abort?.abort();
     this.abort = undefined;
@@ -121,18 +136,25 @@ export class NewsController {
       if (generation !== this.generation || this.disposed) return;
       this.safeInvalidate();
     }
-    this.refreshIfNeeded(true);
+    this.refreshIfNeeded();
   }
 
-  private refreshIfNeeded(force = false): void {
+  private refreshIfNeeded(): void {
     if (!this.active || this.disposed || this.request) return;
-    const newest = Math.max(0, ...(this.snapshot?.sources.map((source) => source.fetchedAt) ?? []));
-    if (!force && newest && this.clock.now() - newest < this.feedTtlMs) return;
-    this.abort = new AbortController();
+    const lastAttempt = this.snapshot?.updatedAt ?? 0;
+    if (lastAttempt && this.clock.now() - lastAttempt < this.refreshIntervalMs) return;
+    const abort = new AbortController();
+    this.abort = abort;
     const generation = this.generation;
-    const task = this.refreshFn(this.abort.signal)
+    const refresh = () => this.refreshFn(abort.signal);
+    const task = (this.coordinateRefresh ? this.coordinateRefresh(refresh) : refresh())
       .then(async (result) => {
         if (generation !== this.generation || this.disposed) return;
+        if (!result) {
+          this.snapshot = (await this.cache.read().catch(() => undefined)) ?? this.snapshot;
+          this.safeInvalidate();
+          return;
+        }
         this.snapshot = result.snapshot;
         try {
           await this.cache.write(result.snapshot);

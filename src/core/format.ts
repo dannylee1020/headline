@@ -1,5 +1,7 @@
 import type { DisplaySegments, Headline } from "./types.js";
 
+export const HEADLINE_BULLET = "•";
+
 export function displaySegments(headline: Headline | undefined): DisplaySegments | undefined {
   if (!headline) return undefined;
   return {
@@ -13,7 +15,7 @@ export function displaySegments(headline: Headline | undefined): DisplaySegments
 export function formatHeadline(headline: Headline | undefined): string {
   const segments = displaySegments(headline);
   if (!segments) return "";
-  return `${segments.source} · ${segments.title}`;
+  return `${HEADLINE_BULLET} ${segments.source} · ${segments.title}`;
 }
 
 export function terminalHyperlink(text: string, url: string | undefined): string {
@@ -30,5 +32,5 @@ export function terminalHyperlink(text: string, url: string | undefined): string
 export function formatLinkedHeadline(headline: Headline | undefined): string {
   const segments = displaySegments(headline);
   if (!segments) return "";
-  return `${segments.source} · ${terminalHyperlink(segments.title, segments.url)}`;
+  return `${HEADLINE_BULLET} ${segments.source} · ${terminalHyperlink(segments.title, segments.url)}`;
 }

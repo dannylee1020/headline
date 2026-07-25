@@ -17,11 +17,11 @@ describe("adapter surfaces", () => {
     expect(typeof opencodePlugin).toBe("object");
     expect(typeof installClaude).toBe("function");
     expect(Object.keys(opencodePlugin)).toEqual(["id", "tui"]);
-    expect((opencodePlugin as { id: string }).id).toBe("newsbar");
+    expect((opencodePlugin as { id: string }).id).toBe("headline");
   });
 
   it("keeps a Pi extension status visible for the session", async () => {
-    const configHome = await mkdtemp(join(tmpdir(), "newsbar-pi-config-"));
+    const configHome = await mkdtemp(join(tmpdir(), "headline-pi-config-"));
     vi.stubEnv("XDG_CONFIG_HOME", configHome);
     const fixture = await readFile(new URL("./fixtures/rss.xml", import.meta.url), "utf8");
     vi.stubGlobal(
@@ -44,7 +44,7 @@ describe("adapter surfaces", () => {
     await handlers.get("session_start")?.({}, context);
     expect(statuses.at(-1)).toBeUndefined();
     await handlers.get("agent_start")?.({}, context);
-    expect(statuses).toContain("Loading headlines…");
+    expect(statuses).toContain("• loading headlines…");
     await vi.waitFor(() => expect(statuses.some((line) => line?.includes("headline"))).toBe(true));
     await handlers.get("agent_settled")?.({}, context);
     expect(statuses.at(-1)).toBeUndefined();
