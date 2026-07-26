@@ -222,8 +222,10 @@ build_staging() {
   [ -f "$source_root/dist/cli/index.js" ] || abort_install "build did not produce the Headline CLI"
   [ -f "$source_root/dist/adapters/pi/index.js" ] || abort_install "build did not produce the Pi adapter"
   [ -f "$source_root/dist/adapters/opencode/index.js" ] || abort_install "build did not produce the OpenCode adapter"
-  node --input-type=module -e 'await import(process.argv[1]); await import(process.argv[2]); await import(process.argv[3])' \
-    "$source_root/dist/cli/index.js" "$source_root/dist/adapters/pi/index.js" "$source_root/dist/adapters/opencode/index.js" \
+  node "$source_root/dist/cli/index.js" doctor >/dev/null \
+    || abort_install "built CLI entrypoint smoke failed"
+  node --input-type=module -e 'await import(process.argv[1]); await import(process.argv[2])' \
+    "$source_root/dist/adapters/pi/index.js" "$source_root/dist/adapters/opencode/index.js" \
     || abort_install "built adapter entrypoint import failed"
 
   current_ready="$parent/.headline-ready.$$"
@@ -254,7 +256,7 @@ write_launcher() {
   cli_path="$INSTALL_DIR/dist/cli/index.js"
   {
     printf '#!/bin/sh\n'
-    printf 'exec %s %s "\$@"\n' "$(shell_quote "$node_path")" "$(shell_quote "$cli_path")"
+    printf 'exec %s %s "$@"\n' "$(shell_quote "$node_path")" "$(shell_quote "$cli_path")"
   } > "$launcher_tmp" || abort_install "cannot write launcher: $LAUNCHER_PATH"
   chmod 755 "$launcher_tmp" || abort_install "cannot make launcher executable: $LAUNCHER_PATH"
   mv -f "$launcher_tmp" "$LAUNCHER_PATH" || abort_install "cannot install launcher: $LAUNCHER_PATH"

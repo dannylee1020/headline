@@ -149,7 +149,10 @@ describe("install.sh staging", () => {
     expect(result.stdout).toContain("All detected Headline integrations installed successfully");
     await import("node:fs/promises").then(({ access }) => access(join(installDir, "dist", "cli", "index.js")));
     const launcher = join(home, "bin", "headline");
-    expect(await readFile(launcher, "utf8")).toContain(join(installDir, "dist", "cli", "index.js"));
+    const launcherContents = await readFile(launcher, "utf8");
+    expect(launcherContents).toContain(join(installDir, "dist", "cli", "index.js"));
+    expect(launcherContents).toContain('"$@"');
+    expect(launcherContents).not.toContain('"\\$@"');
     expect(await readFile(join(home, "config.json"), "utf8")).toContain("always");
     expect(await readFile(join(home, "cache", "snapshot.json"), "utf8")).toBe("cached\n");
   });
