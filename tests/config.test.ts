@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CATEGORIES, DEFAULT_CONFIG, loadConfig } from "../src/core/config.js";
+import { DEFAULT_CONFIG, DEFAULT_PROVIDER_CATEGORIES, loadConfig } from "../src/core/config.js";
 import { sourcesForConfig } from "../src/core/default-sources.js";
 
 async function tempConfig(): Promise<string> {
@@ -11,26 +11,25 @@ async function tempConfig(): Promise<string> {
 }
 
 describe("configuration", () => {
-  it("uses safe defaults when the file is missing", async () => {
+  it("uses safe provider-specific defaults when the file is missing", async () => {
     const path = await tempConfig();
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
+    expect(loaded.config.providers).toEqual(DEFAULT_PROVIDER_CATEGORIES);
     expect(loaded.errors).toEqual([]);
-  });
-
-  it("uses the quiet default categories", () => {
-    expect(DEFAULT_CATEGORIES).toEqual(["general", "finance"]);
     expect(sourcesForConfig(DEFAULT_CONFIG).map((source) => source.id)).toEqual([
-      "axios:general", "bbc:general", "npr:general", "yahoo-finance:finance",
+      "axios:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "techcrunch:technology", "yahoo-finance:finance",
     ]);
   });
 
-  it("loads a category available from only one provider", async () => {
+  it("selects categories independently for each provider", async () => {
     const path = await tempConfig();
     await writeFile(path, JSON.stringify({
-      version: 1,
-      providers: ["bbc", "npr"],
-      categories: ["sports", "sports"],
+      version: 2,
+      providers: {
+        bbc: ["sports", "sports"],
+        npr: ["general"],
+      },
       visibility: "always",
       rotationSeconds: 12,
       refreshMinutes: 30,
@@ -38,12 +37,25 @@ describe("configuration", () => {
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.errors).toEqual([]);
-    expect(loaded.config.providers).toEqual(["bbc", "npr"]);
-    expect(loaded.config.categories).toEqual(["sports"]);
+    expect(loaded.config.providers).toEqual({ bbc: ["sports"], npr: ["general"] });
     expect(loaded.config.visibility).toBe("always");
     expect(loaded.config.intervalMs).toBe(12_000);
     expect(loaded.config.refreshIntervalMs).toBe(30 * 60_000);
-    expect(sourcesForConfig(loaded.config).map((source) => source.id)).toEqual(["bbc:sports", "npr:sports"]);
+    expect(sourcesForConfig(loaded.config).map((source) => source.id)).toEqual(["bbc:sports", "npr:general"]);
+  });
+
+  it("normalizes version 1 global filters for compatibility", async () => {
+    const path = await tempConfig();
+    await writeFile(path, JSON.stringify({
+      version: 1,
+      providers: ["bbc", "npr"],
+      categories: ["sports"],
+    }));
+
+    const loaded = await loadConfig({ filePath: path });
+    expect(loaded.errors).toEqual([]);
+    expect(loaded.config.version).toBe(2);
+    expect(loaded.config.providers).toEqual({ bbc: ["sports"], npr: ["sports"] });
   });
 
   it("migrates a valid legacy config into the Headline home", async () => {
@@ -64,31 +76,41 @@ describe("configuration", () => {
     expect(await readFile(loaded.path, "utf8")).toContain('"visibility":"always"');
   });
 
-  it("treats empty filters as the quiet defaults", async () => {
+  it("uses defaults when providers is omitted", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ providers: [], categories: [] }));
+    await writeFile(path, JSON.stringify({ version: 2, visibility: "always" }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.errors).toEqual([]);
     expect(loaded.config.providers).toEqual(DEFAULT_CONFIG.providers);
-    expect(loaded.config.categories).toEqual(DEFAULT_CONFIG.categories);
   });
 
-  it("falls back to defaults and reports invalid configuration", async () => {
+  it("falls back to defaults for an unknown provider", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ providers: ["unknown-provider"] }));
+    await writeFile(path, JSON.stringify({ version: 2, providers: { unknown: ["general"] } }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
-    expect(loaded.errors[0]).toMatch(/providers/);
+    expect(loaded.errors[0]).toMatch(/unsupported provider/);
   });
 
-  it("rejects a provider and category combination with no available source", async () => {
+  it("rejects categories not exposed by their provider", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ providers: ["axios"], categories: ["sports"] }));
+    await writeFile(path, JSON.stringify({ version: 2, providers: { axios: ["sports"] } }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
-    expect(loaded.errors[0]).toMatch(/available source/);
+    expect(loaded.errors[0]).toMatch(/axios categories.*general/);
+  });
+
+  it("rejects empty provider and category selections", async () => {
+    const path = await tempConfig();
+    await writeFile(path, JSON.stringify({ version: 2, providers: { bbc: [] } }));
+    const emptyCategories = await loadConfig({ filePath: path });
+    expect(emptyCategories.errors[0]).toMatch(/bbc categories/);
+
+    await writeFile(path, JSON.stringify({ version: 2, providers: {} }));
+    const emptyProviders = await loadConfig({ filePath: path });
+    expect(emptyProviders.errors[0]).toMatch(/at least one provider/);
   });
 });

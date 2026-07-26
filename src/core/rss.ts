@@ -24,6 +24,13 @@ export function validHttpUrl(value: string | undefined): value is string {
   }
 }
 
+export function sourceAllowsUrl(source: NewsSource, value: string | undefined): value is string {
+  if (!validHttpUrl(value)) return false;
+  if (!source.excludedUrlPathPrefixes?.length) return true;
+  const path = new URL(value).pathname;
+  return !source.excludedUrlPathPrefixes.some((prefix) => path.startsWith(prefix));
+}
+
 export function canonicalUrl(value: string): string {
   try {
     const url = new URL(value);
@@ -112,7 +119,7 @@ export function parseRss(source: NewsSource, xml: string, fetchedAt: number, max
     .slice(0, maxItems)
     .map((item, index) => {
       const title = cleanText(item.title);
-      const url = item.link && validHttpUrl(item.link) ? item.link : undefined;
+      const url = sourceAllowsUrl(source, item.link) ? item.link : undefined;
       if (!title || !url) return undefined;
       const publishedAt = item.published ? Date.parse(item.published) : Number.NaN;
       const guid = cleanText(item.guid);

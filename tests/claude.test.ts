@@ -35,12 +35,12 @@ describe("Claude integration", () => {
     expect(output).toContain("Cached headline");
   });
 
-  it("honors always visibility and provider/category filters", async () => {
+  it("honors always visibility and provider-specific category filters", async () => {
     const root = await tempRoot();
     const configPath = join(root, "config.json");
     await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({
-      providers: ["npr"],
-      categories: ["general"],
+      version: 2,
+      providers: { npr: ["general"] },
       visibility: "always",
     })));
     const snapshot: NewsSnapshot = {

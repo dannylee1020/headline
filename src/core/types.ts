@@ -1,5 +1,6 @@
 export type Category = string;
 export type CategoryFilter = Category | "all";
+export type ProviderCategories = Readonly<Record<string, readonly Category[]>>;
 
 export interface NewsSource {
   /** Stable identifier for this concrete feed endpoint. */
@@ -10,6 +11,8 @@ export interface NewsSource {
   readonly category: Category;
   readonly url: string;
   readonly userAgent?: string;
+  /** URL path prefixes omitted from this feed's normalized headline set. */
+  readonly excludedUrlPathPrefixes?: readonly string[];
 }
 
 export interface Headline {
@@ -97,8 +100,8 @@ export interface TimerScheduler {
 }
 
 export interface NewsFilters {
-  readonly providers?: readonly string[];
-  readonly categories?: readonly Category[];
+  readonly sourceIds?: readonly string[];
+  readonly providers?: ProviderCategories;
 }
 
 export interface ControllerOptions {

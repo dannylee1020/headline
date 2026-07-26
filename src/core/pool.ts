@@ -61,15 +61,15 @@ function providerIdOf(sourceId: string, providerId: string | undefined): string 
 }
 
 export function buildPool(snapshot: NewsSnapshot, maxItems = 20, filters: NewsFilters = {}): readonly Headline[] {
-  const providers = filters.providers?.length ? new Set(filters.providers) : undefined;
-  const categories = filters.categories?.length ? new Set(filters.categories) : undefined;
+  const sourceIds = filters.sourceIds === undefined ? undefined : new Set(filters.sourceIds);
+  const providers = filters.providers;
   const byCategory = new Map<string, Map<string, Headline[][]>>();
 
   for (const sourceSnapshot of snapshot.sources) {
     const source = sourceSnapshot.source;
     const providerId = providerIdOf(source.id, source.providerId);
-    if (providers && !providers.has(providerId)) continue;
-    if (categories && !categories.has(source.category)) continue;
+    if (sourceIds && !sourceIds.has(source.id)) continue;
+    if (!sourceIds && providers && !providers[providerId]?.includes(source.category)) continue;
 
     const items = deduplicate([...sourceSnapshot.headlines].sort(newestFirst)).slice(0, maxItems);
     const byProvider = byCategory.get(source.category) ?? new Map<string, Headline[][]>();

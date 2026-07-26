@@ -16,7 +16,7 @@ function source(id = "axios:general") {
 describe("default sources", () => {
   it("contains the approved providers and first-party category feeds", () => {
     assertDefaultSources();
-    expect([...new Set(DEFAULT_SOURCES.map(({ providerId }) => providerId))]).toEqual(["axios", "bbc", "npr", "yahoo-finance"]);
+    expect([...new Set(DEFAULT_SOURCES.map(({ providerId }) => providerId))]).toEqual(["axios", "bbc", "npr", "techcrunch", "yahoo-finance"]);
     expect(sourceCapabilities()).toEqual([
       { providerId: "axios", name: "Axios", categories: ["general"] },
       {
@@ -29,10 +29,17 @@ describe("default sources", () => {
         name: "NPR",
         categories: ["general", "national", "world", "politics", "business", "economy", "technology", "health", "science", "education", "climate", "culture", "sports"],
       },
+      { providerId: "techcrunch", name: "TechCrunch", categories: ["technology"] },
       { providerId: "yahoo-finance", name: "Yahoo Finance", categories: ["finance"] },
     ]);
-    expect(sourcesForConfig({ providers: ["axios", "bbc", "npr", "yahoo-finance"], categories: ["general", "finance"] }).map(({ id }) => id)).toEqual([
-      "axios:general", "bbc:general", "npr:general", "yahoo-finance:finance",
+    expect(sourcesForConfig({ providers: {
+      axios: ["general"],
+      bbc: ["general", "technology"],
+      npr: ["general", "technology"],
+      techcrunch: ["technology"],
+      "yahoo-finance": ["finance"],
+    } }).map(({ id }) => id)).toEqual([
+      "axios:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "techcrunch:technology", "yahoo-finance:finance",
     ]);
     expect(JSON.stringify(DEFAULT_SOURCES)).not.toMatch(/google news/i);
   });
@@ -58,18 +65,33 @@ describe("RSS normalization", () => {
     const headlines = parseRss(source(), fixture.replace("A useful", "A\u007f useful"), 1000);
     expect(headlines[0]?.title).toBe("A useful & safe headline");
   });
+
+  it("excludes non-article BBC technology entries", () => {
+    const mixedFeed = fixture.replace("</channel>", `
+      <item>
+        <title>Tech Life</title>
+        <link>https://www.bbc.co.uk/sounds/play/example</link>
+      </item>
+      <item>
+        <title>Tech Now</title>
+        <link>https://www.bbc.co.uk/iplayer/episode/example</link>
+      </item>
+    </channel>`);
+    const headlines = parseRss(source("bbc:technology"), mixedFeed, 1000);
+    expect(headlines.map((headline) => headline.title)).toEqual(["A useful & safe headline", "Second headline"]);
+  });
 });
 
 describe("headline formatting", () => {
   it("prioritizes provider and headline space", () => {
     const headline = parseRss(source(), fixture, 1000)[0];
-    expect(formatHeadline(headline)).toBe("• axios · A useful & safe headline");
+    expect(formatHeadline(headline)).toBe("• axios · general · A useful & safe headline");
   });
 
   it("links the headline without displaying the URL", () => {
     const headline = parseRss(source(), fixture, 1000)[0];
     expect(formatLinkedHeadline(headline)).toBe(
-      "• axios · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
+      "• axios · general · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
     );
     expect(terminalHyperlink("unsafe", "javascript:alert(1)")).toBe("unsafe");
   });
@@ -92,6 +114,30 @@ describe("feed requests", () => {
     expect((calls[0]?.headers as Record<string, string>).Accept).toContain("application/rss+xml");
     expect(result.etag).toBe("abc");
     expect(result.headlines).toHaveLength(2);
+  });
+
+  it("filters stale excluded entries when a feed returns not modified", async () => {
+    const bbcTechnology = source("bbc:technology");
+    const previous = {
+      source: bbcTechnology,
+      fetchedAt: 100,
+      headlines: [{
+        id: "tech-life",
+        title: "Tech Life",
+        url: "https://www.bbc.co.uk/sounds/play/example",
+        sourceId: bbcTechnology.id,
+        providerId: bbcTechnology.providerId,
+        sourceName: bbcTechnology.name,
+        category: bbcTechnology.category,
+        feedOrdinal: 0,
+        fetchedAt: 100,
+      }],
+    };
+    const result = await fetchFeed(bbcTechnology, {
+      fetch: async () => new Response(null, { status: 304 }),
+      now: 200,
+    }, previous);
+    expect(result.headlines).toEqual([]);
   });
 
   it("contains a source failure while preserving the last-good source", async () => {
@@ -152,8 +198,8 @@ describe("pool and rotation", () => {
     expect(pool.map((item) => item.category)).toEqual(["general", "sports", "finance", "general", "sports", "general", "general"]);
     expect(selectHeadline(pool, 0, 8_000)?.title).toBe("axios-general-0");
     expect(selectHeadline(pool, 8_000, 8_000)?.title).toBe("bbc-sports-0");
-    expect(buildPool(snapshot, 20, { providers: ["bbc"], categories: ["sports"] }).map((item) => item.sourceId)).toEqual(["bbc:sports"]);
-    expect(buildPool(snapshot, 20, { providers: ["yahoo-finance"], categories: ["finance"] }).map((item) => item.sourceId)).toEqual(["yahoo-finance:finance"]);
+    expect(buildPool(snapshot, 20, { providers: { bbc: ["sports"] } }).map((item) => item.sourceId)).toEqual(["bbc:sports"]);
+    expect(buildPool(snapshot, 20, { providers: { "yahoo-finance": ["finance"] } }).map((item) => item.sourceId)).toEqual(["yahoo-finance:finance"]);
   });
 
   it("prefers a specific category over a duplicate general headline", () => {

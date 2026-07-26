@@ -34,7 +34,7 @@ export default function headlineExtension(pi: ExtensionAPI): void {
         const headline = controller?.getHeadline();
         const segments = displaySegments(headline);
         const line = segments
-          ? `${ctx.ui.theme.fg("accent", HEADLINE_BULLET)} ${ctx.ui.theme.fg("dim", `${segments.source} · `)}${ctx.ui.theme.fg("muted", terminalHyperlink(segments.title, segments.url))}`
+          ? `${ctx.ui.theme.fg("accent", HEADLINE_BULLET)} ${ctx.ui.theme.fg("dim", `${segments.source} · ${segments.category} · `)}${ctx.ui.theme.fg("muted", terminalHyperlink(segments.title, segments.url))}`
           : ctx.ui.theme.fg("dim", controller?.getSnapshot() ? `${HEADLINE_BULLET} headlines unavailable` : `${HEADLINE_BULLET} loading headlines…`);
         ctx.ui.setStatus(STATUS_KEY, line);
       } catch {
@@ -48,7 +48,7 @@ export default function headlineExtension(pi: ExtensionAPI): void {
         intervalMs: config.intervalMs,
         refreshIntervalMs: config.refreshIntervalMs,
         maxItems: config.maxItems,
-        filters: config,
+        filters: { sourceIds: sourcesForConfig(config).map((source) => source.id) },
         coordinateRefresh: (refresh) => coordinator.run(refresh),
         refresh: (signal) => refreshFeeds(sourcesForConfig(config), controller?.getSnapshot(), {
           signal,

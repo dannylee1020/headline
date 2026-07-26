@@ -22,7 +22,7 @@ describe("adapter surfaces", () => {
 
   it("keeps a Pi extension status visible for the session", async () => {
     const configHome = await mkdtemp(join(tmpdir(), "headline-pi-config-"));
-    vi.stubEnv("XDG_CONFIG_HOME", configHome);
+    vi.stubEnv("HEADLINE_HOME", configHome);
     const fixture = await readFile(new URL("./fixtures/rss.xml", import.meta.url), "utf8");
     vi.stubGlobal(
       "fetch",

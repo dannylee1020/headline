@@ -55,11 +55,12 @@ Codex and tmux are intentionally not part of v0.
 
 ## Sources
 
-Headline uses only unauthenticated, first-party RSS/XML feeds from these providers:
+Headline's built-in registry uses unauthenticated, first-party RSS/XML feeds from these providers:
 
 - Axios — `general` — <https://api.axios.com/feed/>
 - BBC — `general`, `world`, `uk`, `business`, `politics`, `technology`, `health`, `education`, `science`, `entertainment`, `sports` — [official feed directory](https://www.bbc.com/news/10628494)
 - NPR — `general`, `national`, `world`, `politics`, `business`, `economy`, `technology`, `health`, `science`, `education`, `climate`, `culture`, `sports` — [official topic feeds](https://feeds.npr.org/1001/rss.xml)
+- TechCrunch — `technology` — <https://techcrunch.com/feed/>
 - Yahoo Finance — `finance` — <https://finance.yahoo.com/news/rssindex>
 
 Run `headline sources` to see the current provider/category capability union. AP is intentionally excluded because it does not provide a free public RSS feed.
@@ -72,22 +73,45 @@ Headline reads an optional JSON configuration file from `${HEADLINE_HOME:-$HOME/
 
 ```json
 {
-  "version": 1,
-  "providers": ["bbc", "npr"],
-  "categories": ["technology", "sports"],
+  "version": 2,
+  "sources": {
+    "mode": "built-in",
+    "providers": {
+      "bbc": ["technology", "sports"],
+      "npr": ["technology"],
+      "techcrunch": ["technology"]
+    }
+  },
   "visibility": "working",
   "rotationSeconds": 8,
   "refreshMinutes": 15
 }
 ```
 
-- `providers` — any of `axios`, `bbc`, `npr`, or `yahoo-finance`.
-- `categories` — any category exposed by at least one selected provider. `technology` and `sports`, for example, fetch BBC and NPR feeds; unsupported provider/category pairs are skipped. Run `headline sources` to list the union.
+- `sources.mode` — `built-in` (default) or `opml`; the modes are mutually exclusive.
+- `sources.providers` — in `built-in` mode, maps each enabled provider to the exact RSS categories to fetch. Omit a provider to exclude it. Run `headline sources` to list the supported mapping.
+- `sources.path` — in `opml` mode, path to an OPML subscription export. Relative paths are resolved beside `config.json`; `~/...` paths are supported.
 - `visibility` — `working` (default), `always`, or `off`. `working` shows Headline only while the host is processing a task.
 - `rotationSeconds` — headline rotation interval from 2 to 60 seconds; this only rotates cached headlines.
 - `refreshMinutes` — RSS polling interval from 5 to 1440 minutes; default 15.
 
-Omit `providers` or use an empty array to select all providers. Omit `categories` or use an empty array to use the quiet default of `general` and `finance`; explicitly selecting a category fetches every selected provider feed that supports it. At least one provider/category feed must resolve. Only the built-in providers and feeds are supported; custom feeds are not supported. Missing or invalid configuration falls back to defaults without interrupting the host. Run `headline doctor` to print the config path, effective settings, and validation errors. Restart Pi or OpenCode after changing the file; Claude reads it for each status invocation.
+Omit `sources` to use the defaults: Axios `general`; BBC `general` and `technology`; NPR `general` and `technology`; TechCrunch `technology`; and Yahoo Finance `finance`. Version 1 configs with separate provider/category arrays and version 2 configs with top-level `providers` remain readable. Invalid configuration falls back to built-in defaults; an invalid or missing OPML file stays in OPML mode and produces no built-in headlines. Run `headline doctor` to print the effective source mode, feed count, path, and diagnostics. Restart Pi or OpenCode after changing the file; Claude reads it for each status invocation.
+
+### Use an existing RSS reader subscription list
+
+Most RSS readers can export subscriptions as an `.opml` file. Export that file from NetNewsWire, Feedly, FreshRSS, Miniflux, or another reader, then configure:
+
+```json
+{
+  "version": 2,
+  "sources": {
+    "mode": "opml",
+    "path": "~/Documents/subscriptions.opml"
+  }
+}
+```
+
+Headline reads the feed URLs, names, and folders from the OPML file. It then fetches those public HTTP(S) feeds independently, caches their headlines, and displays them through the coding-agent integrations. OPML transfers the subscription list—not the reader's downloaded articles, unread state, starred state, credentials, or filters. Re-export the file when subscriptions change. Use `headline opml inspect PATH` to validate an export without modifying it.
 
 ## Manual/local development
 
@@ -106,6 +130,7 @@ headline doctor
 headline config path
 headline config show
 headline sources
+headline opml inspect ~/Documents/subscriptions.opml
 headline refresh
 headline cache clear
 ```
@@ -145,7 +170,7 @@ The source installer invokes `pi install <stable-install-dir>` at user scope. Se
 
 ## Runtime behavior
 
-- Feeds refresh concurrently with a five-second timeout, RSS/XML `Accept`, descriptive `User-Agent`, and a one MiB response limit.
+- Feeds refresh with bounded concurrency, a five-second timeout, RSS/XML `Accept`, descriptive `User-Agent`, and a one MiB response limit.
 - Headline rotation reads the persistent cache; RSS polling happens only at `refreshMinutes` and is coordinated across active hosts.
 - A failed source does not discard healthy sources or last-good data.
 - Rotation is deterministic: the headline changes at the configured interval (eight seconds by default) without writing an index on every tick.
@@ -154,6 +179,7 @@ The source installer invokes `pi install <stable-install-dir>` at user scope. Se
 - Claude status invocations return cached/loading output immediately; refresh happens in at most one bounded worker.
 - `HEADLINE_OFFLINE=1` or `PI_OFFLINE=1` can suppress network requests in host integrations.
 - Configuration, cache, and runtime state are organized under `HEADLINE_HOME` as `config.json`, `cache/`, and `state/`; `HEADLINE_CACHE_DIR` remains available for tests and overrides.
+- OPML imports are limited to a bounded local file and feed count; invalid entries are skipped with diagnostics, and one failed feed does not hide healthy feeds.
 - `working` visibility uses Claude activity hooks, OpenCode `busy`/`retry` state, or Pi's `agent_start`/`agent_settled` events; `always` keeps the selected headline visible for the host session.
 
 To restore Claude settings, stop Claude Code and replace the settings file with its `.headline.bak` copy. Remove `$HEADLINE_HOME/app` and `$HEADLINE_HOME/bin/headline` only after removing host registrations; keep `config.json`, `cache/`, and `state/` if you plan to reinstall.

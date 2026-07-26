@@ -1,13 +1,14 @@
 import type { HeadlineConfig } from "./config.js";
-import type { NewsSource } from "./types.js";
+import type { NewsSource, ProviderCategories } from "./types.js";
 
 function feed(
   providerId: string,
   name: string,
   category: string,
   url: string,
+  options: Pick<NewsSource, "excludedUrlPathPrefixes"> = {},
 ): NewsSource {
-  return { id: `${providerId}:${category}`, providerId, name, category, url };
+  return { id: `${providerId}:${category}`, providerId, name, category, url, ...options };
 }
 
 /**
@@ -22,7 +23,9 @@ export const DEFAULT_SOURCES: readonly NewsSource[] = [
   feed("bbc", "BBC", "uk", "https://feeds.bbci.co.uk/news/uk/rss.xml"),
   feed("bbc", "BBC", "business", "https://feeds.bbci.co.uk/news/business/rss.xml"),
   feed("bbc", "BBC", "politics", "https://feeds.bbci.co.uk/news/politics/rss.xml"),
-  feed("bbc", "BBC", "technology", "https://feeds.bbci.co.uk/news/technology/rss.xml"),
+  feed("bbc", "BBC", "technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", {
+    excludedUrlPathPrefixes: ["/sounds/", "/iplayer/"],
+  }),
   feed("bbc", "BBC", "health", "https://feeds.bbci.co.uk/news/health/rss.xml"),
   feed("bbc", "BBC", "education", "https://feeds.bbci.co.uk/news/education/rss.xml"),
   feed("bbc", "BBC", "science", "https://feeds.bbci.co.uk/news/science_and_environment/rss.xml"),
@@ -43,14 +46,25 @@ export const DEFAULT_SOURCES: readonly NewsSource[] = [
   feed("npr", "NPR", "culture", "https://feeds.npr.org/1008/rss.xml"),
   feed("npr", "NPR", "sports", "https://feeds.npr.org/1055/rss.xml"),
 
+  feed("techcrunch", "TechCrunch", "technology", "https://techcrunch.com/feed/"),
+
   feed("yahoo-finance", "Yahoo Finance", "finance", "https://finance.yahoo.com/news/rssindex"),
 ];
 
 export const DEFAULT_PROVIDER_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.providerId))];
 export const SUPPORTED_CATEGORY_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.category))];
 
-/** The quiet default keeps the original four-feed request shape. */
-export const DEFAULT_CATEGORIES: readonly string[] = ["general", "finance"];
+/** Legacy global category defaults retained for version 1 config compatibility. */
+export const DEFAULT_CATEGORIES: readonly string[] = ["general", "finance", "technology"];
+
+/** Exact default feeds, grouped by provider for version 2 configuration. */
+export const DEFAULT_PROVIDER_CATEGORIES: ProviderCategories = {
+  axios: ["general"],
+  bbc: ["general", "technology"],
+  npr: ["general", "technology"],
+  techcrunch: ["technology"],
+  "yahoo-finance": ["finance"],
+};
 
 export interface SourceCapability {
   readonly providerId: string;
@@ -75,10 +89,14 @@ export function sourceCapabilities(sources: readonly NewsSource[] = DEFAULT_SOUR
   }));
 }
 
-export function sourcesForConfig(config: Pick<HeadlineConfig, "providers" | "categories">): readonly NewsSource[] {
-  const providers = new Set(config.providers);
-  const categories = new Set(config.categories);
-  return DEFAULT_SOURCES.filter((source) => providers.has(source.providerId) && categories.has(source.category));
+export function sourcesForProviderCategories(providers: ProviderCategories): readonly NewsSource[] {
+  return DEFAULT_SOURCES.filter((source) => providers[source.providerId]?.includes(source.category));
+}
+
+export function sourcesForConfig(
+  config: Pick<HeadlineConfig, "providers"> & Partial<Pick<HeadlineConfig, "sources">>,
+): readonly NewsSource[] {
+  return config.sources ?? sourcesForProviderCategories(config.providers);
 }
 
 export function assertDefaultSources(sources: readonly NewsSource[] = DEFAULT_SOURCES): void {
@@ -89,8 +107,8 @@ export function assertDefaultSources(sources: readonly NewsSource[] = DEFAULT_SO
     }
     ids.add(source.id);
   }
-  const required = ["axios:general", "bbc:general", "bbc:technology", "bbc:sports", "npr:general", "npr:technology", "npr:sports", "yahoo-finance:finance"];
-  if (required.some((id) => !ids.has(id)) || sources.some((source) => /google news/i.test(source.name + source.url))) {
+  const required = ["axios:general", "bbc:general", "bbc:technology", "bbc:sports", "npr:general", "npr:technology", "npr:sports", "techcrunch:technology", "yahoo-finance:finance"];
+  if (sources.length !== 27 || required.some((id) => !ids.has(id)) || sources.some((source) => /google news/i.test(source.name + source.url))) {
     throw new Error("Headline source registry is missing an approved first-party feed");
   }
 }

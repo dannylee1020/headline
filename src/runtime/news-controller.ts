@@ -141,7 +141,10 @@ export class NewsController {
 
   private refreshIfNeeded(): void {
     if (!this.active || this.disposed || this.request) return;
-    const lastAttempt = this.snapshot?.updatedAt ?? 0;
+    const selectedSourceIds = this.filters?.sourceIds;
+    const hasSelectedSourceAttempts = !selectedSourceIds?.length
+      || selectedSourceIds.every((sourceId) => this.snapshot?.health.some((item) => item.sourceId === sourceId));
+    const lastAttempt = hasSelectedSourceAttempts ? this.snapshot?.updatedAt ?? 0 : 0;
     if (lastAttempt && this.clock.now() - lastAttempt < this.refreshIntervalMs) return;
     const abort = new AbortController();
     this.abort = abort;

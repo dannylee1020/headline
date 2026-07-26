@@ -1,6 +1,8 @@
 import { DEFAULT_MAX_BYTES, DEFAULT_MAX_ITEMS, DEFAULT_TIMEOUT_MS, DEFAULT_USER_AGENT } from "./config.js";
-import { parseRss, validHttpUrl } from "./rss.js";
+import { parseRss, sourceAllowsUrl, validHttpUrl } from "./rss.js";
 import type { FeedFailure, FeedResult, FetchLike, NewsSource, NewsSnapshot, SourceSnapshot } from "./types.js";
+
+export const DEFAULT_MAX_CONCURRENT_FEEDS = 8;
 
 export interface FetchFeedOptions {
   readonly fetch?: FetchLike;
@@ -79,7 +81,7 @@ export async function fetchFeed(source: NewsSource, options: FetchFeedOptions = 
     if (response.status === 304 && previous) {
       return {
         source,
-        headlines: previous.headlines,
+        headlines: previous.headlines.filter((headline) => sourceAllowsUrl(source, headline.url)),
         fetchedAt: options.now ?? Date.now(),
         ...(previous.etag ? { etag: previous.etag } : {}),
         ...(previous.lastModified ? { lastModified: previous.lastModified } : {}),
@@ -103,6 +105,7 @@ export async function fetchFeed(source: NewsSource, options: FetchFeedOptions = 
 
 export interface RefreshFeedsOptions extends FetchFeedOptions {
   readonly sources?: readonly NewsSource[];
+  readonly concurrency?: number;
 }
 
 export async function refreshFeeds(
@@ -112,7 +115,23 @@ export async function refreshFeeds(
 ): Promise<{ snapshot: NewsSnapshot; failures: readonly FeedFailure[] }> {
   const previousById = new Map(previous?.sources.map((item) => [item.source.id, item]) ?? []);
   const now = options.now ?? Date.now();
-  const settled = await Promise.allSettled(sources.map((source) => fetchFeed(source, options, previousById.get(source.id))));
+  const settled: PromiseSettledResult<FeedResult>[] = Array.from({ length: sources.length });
+  const concurrency = Math.max(1, Math.min(sources.length || 1, Math.floor(options.concurrency ?? DEFAULT_MAX_CONCURRENT_FEEDS)));
+  let nextIndex = 0;
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= sources.length) return;
+      const source = sources[index]!;
+      try {
+        settled[index] = { status: "fulfilled", value: await fetchFeed(source, options, previousById.get(source.id)) };
+      } catch (reason) {
+        settled[index] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
   const failures: FeedFailure[] = [];
   const next: SourceSnapshot[] = [];
   const health = [];

@@ -24,7 +24,7 @@ function linkedHeadline(
 ): StyledText | undefined {
   const segments = displaySegments(headline);
   if (!segments) return undefined;
-  const prefix = `${HEADLINE_BULLET} ${segments.source} · `;
+  const prefix = `${HEADLINE_BULLET} ${segments.source} · ${segments.category} · `;
   const title = crop(segments.title, Math.max(0, width - prefix.length));
   const titleChunk: TextChunk = {
     __isChunk: true,
@@ -35,6 +35,8 @@ function linkedHeadline(
   return new StyledText([
     { __isChunk: true, text: `${HEADLINE_BULLET} `, fg: theme.accent },
     { __isChunk: true, text: segments.source, fg: theme.textMuted },
+    { __isChunk: true, text: " · ", fg: theme.textMuted },
+    { __isChunk: true, text: segments.category, fg: theme.textMuted },
     { __isChunk: true, text: " · ", fg: theme.textMuted },
     titleChunk,
   ]);
@@ -69,7 +71,7 @@ const tui: TuiPlugin = async (api) => {
         intervalMs: config.intervalMs,
         refreshIntervalMs: config.refreshIntervalMs,
         maxItems: config.maxItems,
-        filters: config,
+        filters: { sourceIds: sources.map((source) => source.id) },
         coordinateRefresh: (refresh) => coordinator.run(refresh),
         refresh: (signal) => refreshFeeds(sources, controller?.getSnapshot(), {
           signal,

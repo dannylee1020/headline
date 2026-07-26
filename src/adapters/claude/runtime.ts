@@ -79,13 +79,13 @@ export async function runStatus(input: StatusInput | undefined, options: StatusO
   const configuredSources = sourcesForConfig(config);
   const configuredSourceIds = new Set(configuredSources.map((source) => source.id));
   const newest = Math.max(0, ...(snapshot?.sources.filter((source) => configuredSourceIds.has(source.source.id)).map((source) => source.fetchedAt) ?? []));
-  const hasConfiguredSources = configuredSources.every((source) => snapshot?.sources.some((item) => item.source.id === source.id));
+  const hasConfiguredSources = configuredSources.every((source) => snapshot?.health.some((item) => item.sourceId === source.id));
   const lastAttempt = hasConfiguredSources ? snapshot?.updatedAt ?? newest : 0;
   if ((!lastAttempt || now - lastAttempt >= config.refreshIntervalMs) && await activity.claimRefresh(now).catch(() => false)) {
     (options.spawnWorker ?? spawnRefreshWorker)();
   }
   if (!snapshot) return `${HEADLINE_BULLET} loading headlines…`;
-  return formatLinkedHeadline(selectHeadline(buildPool(snapshot, config.maxItems, config), now, config.intervalMs));
+  return formatLinkedHeadline(selectHeadline(buildPool(snapshot, config.maxItems, { sourceIds: configuredSources.map((source) => source.id) }), now, config.intervalMs));
 }
 
 export async function runRefreshWorker(root?: string, configPath?: string): Promise<void> {
