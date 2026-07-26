@@ -3,20 +3,15 @@
 # Usage: curl -fsSL https://raw.githubusercontent.com/dannylee1020/headline/main/install.sh | sh
 set -u
 
-REPOSITORY=${HEADLINE_REPOSITORY:-dannylee1020/headline}
-REF=${HEADLINE_REF:-main}
-REF_TYPE=${HEADLINE_REF_TYPE:-heads}
-ARCHIVE_URL=${HEADLINE_ARCHIVE_URL:-}
+REPOSITORY=dannylee1020/headline
+REF=main
+REF_TYPE=heads
 HOME_DIR=${HOME:-}
 HEADLINE_HOME=${HEADLINE_HOME:-${HOME_DIR:+$HOME_DIR/.headline}}
-INSTALL_DIR=${HEADLINE_INSTALL_DIR:-${HEADLINE_HOME:+$HEADLINE_HOME/app}}
+INSTALL_DIR=${HEADLINE_HOME:+$HEADLINE_HOME/app}
 INSTALL_DIR=${INSTALL_DIR:-$HOME_DIR/.headline/app}
 LAUNCHER_PATH=${HEADLINE_HOME:+$HEADLINE_HOME/bin/headline}
 LAUNCHER_PATH=${LAUNCHER_PATH:-$HOME_DIR/.headline/bin/headline}
-DRY_RUN=${HEADLINE_DRY_RUN:-0}
-REQUESTED_HOSTS=${HEADLINE_INSTALL_HOSTS:-}
-CLAUDE_FORCE=${HEADLINE_CLAUDE_FORCE:-0}
-PI_PROJECT=${HEADLINE_PI_PROJECT:-0}
 
 work_dir=
 current_ready=
@@ -67,16 +62,6 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
-requested_host() {
-  if [ -z "$REQUESTED_HOSTS" ]; then
-    return 0
-  fi
-  case ",$REQUESTED_HOSTS," in
-    *,"$1",*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 version_at_least() {
   node_version=$1
   minimum=$2
@@ -114,12 +99,12 @@ validate_paths() {
     *) fail "HEADLINE_HOME must be an absolute path: $HEADLINE_HOME" ;;
   esac
   case "$INSTALL_DIR" in
-    ""|/|"$HOME_DIR"|.) fail "HEADLINE_INSTALL_DIR must be a dedicated user-local directory" ;;
+    ""|/|"$HOME_DIR"|.) fail "Headline application directory must be a dedicated user-local directory" ;;
     /*) ;;
-    *) fail "HEADLINE_INSTALL_DIR must be an absolute path: $INSTALL_DIR" ;;
+    *) fail "Headline application directory must be an absolute path: $INSTALL_DIR" ;;
   esac
   if [ "$INSTALL_DIR" = "$PWD" ]; then
-    fail "HEADLINE_INSTALL_DIR must not be the current working directory"
+    fail "Headline application directory must not be the current working directory"
   fi
 }
 
@@ -136,16 +121,16 @@ check_tools() {
 }
 
 detect_hosts() {
-  if requested_host claude && has_command claude; then
+  if has_command claude; then
     claude_cmd=$(command -v claude)
     claude_version=$(claude --version 2>/dev/null || true)
     detected_count=$((detected_count + 1))
     say "Detected Claude Code: $claude_cmd ${claude_version}"
-  elif requested_host claude; then
+  else
     no_host_count=$((no_host_count + 1))
   fi
 
-  if requested_host opencode && has_command opencode; then
+  if has_command opencode; then
     opencode_cmd=$(command -v opencode)
     opencode_version=$(opencode --version 2>/dev/null || true)
     if version_at_least "$opencode_version" "1.18.4"; then
@@ -157,11 +142,11 @@ detect_hosts() {
       warn "OpenCode ${opencode_version:-unknown} is unsupported; Headline requires >=1.18.4"
       opencode_cmd=
     fi
-  elif requested_host opencode; then
+  else
     no_host_count=$((no_host_count + 1))
   fi
 
-  if requested_host pi && has_command pi; then
+  if has_command pi; then
     pi_cmd=$(command -v pi)
     pi_version=$(pi --version 2>/dev/null || true)
     if version_at_least "$pi_version" "0.81.1"; then
@@ -173,24 +158,13 @@ detect_hosts() {
       warn "Pi ${pi_version:-unknown} is unsupported; Headline requires >=0.81.1"
       pi_cmd=
     fi
-  elif requested_host pi; then
+  else
     no_host_count=$((no_host_count + 1))
   fi
 }
 
 archive_url() {
-  if [ -n "$ARCHIVE_URL" ]; then
-    case "$ARCHIVE_URL" in
-      https://*) printf '%s' "$ARCHIVE_URL" ;;
-      *) abort_install "HEADLINE_ARCHIVE_URL must use HTTPS" ;;
-    esac
-  else
-    case "$REF_TYPE" in
-      heads|tags) ;;
-      *) abort_install "HEADLINE_REF_TYPE must be heads or tags" ;;
-    esac
-    printf 'https://codeload.github.com/%s/tar.gz/refs/%s/%s' "$REPOSITORY" "$REF_TYPE" "$REF"
-  fi
+  printf 'https://codeload.github.com/%s/tar.gz/refs/%s/%s' "$REPOSITORY" "$REF_TYPE" "$REF"
 }
 
 build_staging() {
@@ -266,31 +240,17 @@ write_launcher() {
 
 install_claude() {
   say "Installing Claude Code integration"
-  if [ "$CLAUDE_FORCE" = "1" ] || [ "$CLAUDE_FORCE" = "true" ]; then
-    HEADLINE_CLAUDE_FORCE=1
-    if [ -n "${HEADLINE_CLAUDE_SETTINGS:-}" ]; then HEADLINE_CLAUDE_SETTINGS="$HEADLINE_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude --force --launcher "$LAUNCHER_PATH"; else node "$INSTALL_DIR/dist/cli/index.js" install claude --force --launcher "$LAUNCHER_PATH"; fi
-  else
-    if [ -n "${HEADLINE_CLAUDE_SETTINGS:-}" ]; then HEADLINE_CLAUDE_SETTINGS="$HEADLINE_CLAUDE_SETTINGS" node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"; else node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"; fi
-  fi
+  node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"
 }
 
 install_opencode() {
   say "Installing OpenCode TUI integration"
-  plugin_path="$INSTALL_DIR/dist/adapters/opencode/index.js"
-  if [ -n "${HEADLINE_OPENCODE_CONFIG:-}" ]; then
-    node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$plugin_path" --config "$HEADLINE_OPENCODE_CONFIG"
-  else
-    node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$plugin_path"
-  fi
+  node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$INSTALL_DIR/dist/adapters/opencode/index.js"
 }
 
 install_pi() {
   say "Installing Pi integration"
-  if [ "$PI_PROJECT" = "1" ] || [ "$PI_PROJECT" = "true" ]; then
-    node "$INSTALL_DIR/dist/cli/index.js" install pi --path "$INSTALL_DIR" --project
-  else
-    node "$INSTALL_DIR/dist/cli/index.js" install pi --path "$INSTALL_DIR"
-  fi
+  node "$INSTALL_DIR/dist/cli/index.js" install pi --path "$INSTALL_DIR"
 }
 
 run_hosts() {
@@ -313,11 +273,6 @@ if [ "$detected_count" -eq 0 ]; then
   say "No supported coding agent detected (Claude Code, OpenCode >=1.18.4, or Pi >=0.81.1)."
   say "Install one of the supported agents, then rerun this command."
   exit 2
-fi
-
-if [ "$DRY_RUN" = "1" ] || [ "$DRY_RUN" = "true" ]; then
-  say "Dry run: would build at $INSTALL_DIR, create $LAUNCHER_PATH, and install detected hosts."
-  exit 0
 fi
 
 build_staging

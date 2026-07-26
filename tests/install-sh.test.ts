@@ -49,7 +49,6 @@ describe("install.sh", () => {
         ...process.env,
         PATH: fake.path,
         HEADLINE_HOME: join(tmpdir(), "headline-no-host-home"),
-        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-no-host-test"),
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(2);
@@ -57,36 +56,37 @@ describe("install.sh", () => {
     await expect(import("node:fs/promises").then(({ access }) => access(fake.marker))).rejects.toBeTruthy();
   });
 
-  it("reports all detected hosts in dry-run mode", async () => {
-    const fake = await fakePath({ claude: "2.1.137", opencode: "1.18.4", pi: "0.81.1" });
+  it("installs every compatible detected host", async () => {
+    const archive = await sourceArchive();
+    const home = await mkdtemp(join(tmpdir(), "headline-all-hosts-home-"));
+    const fake = await fakePath({ claude: "2.1.137", opencode: "1.18.4", pi: "0.81.1" }, { archive, fakeNode: true });
     const result = await execFileAsync("sh", [shellScript], {
       env: {
         ...process.env,
         PATH: fake.path,
-        HEADLINE_DRY_RUN: "1",
-        HEADLINE_HOME: join(tmpdir(), "headline-all-hosts-home"),
-        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-all-hosts-test"),
+        HEADLINE_HOME: home,
       },
     });
     expect(result.stdout).toContain("Detected Claude Code");
     expect(result.stdout).toContain("Detected OpenCode");
     expect(result.stdout).toContain("Detected Pi");
-    expect(result.stdout).toContain("Dry run");
+    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
   });
 
   it("marks old OpenCode unsupported without blocking Pi", async () => {
-    const fake = await fakePath({ opencode: "1.0.0", pi: "0.81.1" });
+    const archive = await sourceArchive();
+    const home = await mkdtemp(join(tmpdir(), "headline-old-opencode-home-"));
+    const fake = await fakePath({ opencode: "1.0.0", pi: "0.81.1" }, { archive, fakeNode: true });
     const result = await execFileAsync("sh", [shellScript], {
       env: {
         ...process.env,
         PATH: fake.path,
-        HEADLINE_DRY_RUN: "1",
-        HEADLINE_HOME: join(tmpdir(), "headline-old-opencode-home"),
-        HEADLINE_INSTALL_DIR: join(tmpdir(), "headline-old-opencode-test"),
+        HEADLINE_HOME: home,
       },
     });
     expect(`${result.stdout}${result.stderr}`).toContain("unsupported");
     expect(result.stdout).toContain("Detected Pi");
+    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
   });
 });
 
@@ -108,7 +108,9 @@ async function sourceArchive(): Promise<string> {
 describe("install.sh staging", () => {
   it("leaves the current install unchanged when the source build fails", async () => {
     const archive = await sourceArchive();
-    const installDir = await mkdtemp(join(tmpdir(), "headline-current-"));
+    const home = await mkdtemp(join(tmpdir(), "headline-current-"));
+    const installDir = join(home, "app");
+    await mkdir(installDir);
     const sentinel = join(installDir, "sentinel");
     await writeFile(sentinel, "keep");
     const fake = await fakePath({ pi: "0.81.1" }, { archive, npmFailure: true, fakeNode: true });
@@ -116,10 +118,7 @@ describe("install.sh staging", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        HEADLINE_ARCHIVE_URL: "https://example.test/headline.tar.gz",
-        HEADLINE_INSTALL_HOSTS: "pi",
-        HEADLINE_HOME: join(tmpdir(), "headline-failure-home"),
-        HEADLINE_INSTALL_DIR: installDir,
+        HEADLINE_HOME: home,
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(1);
@@ -129,8 +128,8 @@ describe("install.sh staging", () => {
   it("promotes a built tree and invokes detected Pi", async () => {
     const archive = await sourceArchive();
     const parent = await mkdtemp(join(tmpdir(), "headline-promote-"));
-    const installDir = join(parent, "headline");
     const home = join(parent, "home");
+    const installDir = join(home, "app");
     await mkdir(join(home, "cache"), { recursive: true });
     await writeFile(join(home, "config.json"), "{\"visibility\":\"always\"}\n");
     await writeFile(join(home, "cache", "snapshot.json"), "cached\n");
@@ -139,10 +138,7 @@ describe("install.sh staging", () => {
       env: {
         ...process.env,
         PATH: fake.path,
-        HEADLINE_ARCHIVE_URL: "https://example.test/headline.tar.gz",
-        HEADLINE_INSTALL_HOSTS: "pi",
         HEADLINE_HOME: home,
-        HEADLINE_INSTALL_DIR: installDir,
       },
     });
     expect(result.stdout).toContain("Installed Headline application");
