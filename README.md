@@ -1,6 +1,6 @@
 # Headline
 
-Headline is a private v0 TypeScript package that shows rotating RSS headlines while **Claude Code**, **OpenCode**, or **Pi** is actively working.
+Headline displays real-time news headlines while coding agent is actively working.
 
 ## One-command installation
 
@@ -10,13 +10,13 @@ curl -fsSL https://raw.githubusercontent.com/dannylee1020/headline/main/install.
 
 The installer builds Headline locally, installs it under `${HEADLINE_HOME:-$HOME/.headline}`, detects Claude Code, OpenCode, and Pi automatically, and registers every compatible agent it finds.
 
-Prerequisites: macOS or Linux, POSIX `sh`, `curl`, `tar`, Node `>=22.19.0`, and npm. No GitHub CLI, Git, Bun, jq, Deno, tmux, sudo, or root access is required.
+Prerequisites: macOS or Linux, POSIX `sh`, `curl`, `tar`, Node `>=22.19.0`, and npm. 
 
 Set `HEADLINE_HOME` only when you need a custom Headline home directory. The application is installed at `$HEADLINE_HOME/app` and the CLI launcher at `$HEADLINE_HOME/bin/headline`.
 
 The installer stages and builds before changing host configuration, keeps a timestamped previous install, and reports restoration paths. It exits with an error if prerequisites are missing or a detected integration fails.
 
-## Supported hosts
+## Supported agents
 
 - **Claude Code:** command status line, installed through the built CLI.
 - **OpenCode:** native TUI plugin using the `app_bottom` slot; requires OpenCode `>=1.18.4 <2`.
