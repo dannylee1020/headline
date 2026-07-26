@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { installClaude, InstallConflict } from "../src/adapters/claude/install.js";
 import { runLifecycle, runStatus } from "../src/adapters/claude/runtime.js";
 import { DEFAULT_SOURCES } from "../src/core/default-sources.js";
+import { displayWidth } from "../src/core/format.js";
 import { FileSnapshotCache } from "../src/runtime/file-cache.js";
 import type { NewsSnapshot } from "../src/core/types.js";
 
@@ -33,6 +34,36 @@ describe("Claude integration", () => {
     await new FileSnapshotCache({ root }).write(snapshot);
     const output = await runStatus({ session_id: "session-1" }, { root, configPath: join(root, "config.json"), now: 1000, spawnWorker: vi.fn() });
     expect(output).toContain("Cached headline");
+  });
+
+  it("uses terminal width and preserves title priority in Claude output", async () => {
+    const root = await tempRoot();
+    const configPath = join(root, "config.json");
+    await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({
+      version: 2,
+      providers: { npr: ["general"] },
+      visibility: "always",
+    })));
+    const snapshot: NewsSnapshot = {
+      version: 1,
+      updatedAt: 1000,
+      health: [{ sourceId: "npr:general", ok: true, fetchedAt: 1000 }],
+      sources: [{
+        source: DEFAULT_SOURCES.find((source) => source.id === "npr:general")!,
+        fetchedAt: 1000,
+        headlines: [{
+          id: "npr-1", title: "A deliberately long headline for a narrow terminal", url: "https://example.com/story", sourceId: "npr:general", providerId: "npr", sourceName: "NPR", category: "general", fetchedAt: 1000, feedOrdinal: 0,
+        }],
+      }],
+    };
+    await new FileSnapshotCache({ root }).write(snapshot);
+    vi.stubEnv("COLUMNS", "24");
+    vi.stubEnv("NO_COLOR", "1");
+    const output = await runStatus({ session_id: "session-1" }, { root, configPath, now: 1000, spawnWorker: vi.fn() });
+    expect(output).not.toContain("npr · general");
+    expect(displayWidth(output)).toBeLessThanOrEqual(24);
+    expect(output).toContain("…");
+    vi.unstubAllEnvs();
   });
 
   it("honors always visibility and provider-specific category filters", async () => {

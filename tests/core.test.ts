@@ -2,7 +2,15 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_SOURCES, assertDefaultSources, sourceCapabilities, sourcesForConfig } from "../src/core/default-sources.js";
 import { fetchFeed, refreshFeeds } from "../src/core/fetch-feeds.js";
-import { formatHeadline, formatLinkedHeadline, terminalHyperlink } from "../src/core/format.js";
+import {
+  displayWidth,
+  formatHeadline,
+  formatHeadlineLayout,
+  formatHeadlineState,
+  formatLinkedHeadline,
+  layoutHeadline,
+  terminalHyperlink,
+} from "../src/core/format.js";
 import { buildPool, selectHeadline } from "../src/core/pool.js";
 import { parseRss } from "../src/core/rss.js";
 import type { NewsSnapshot } from "../src/core/types.js";
@@ -94,6 +102,35 @@ describe("headline formatting", () => {
       "• axios · general · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
     );
     expect(terminalHyperlink("unsafe", "javascript:alert(1)")).toBe("unsafe");
+  });
+
+  it("prioritizes title space as the available width narrows", () => {
+    const headline = parseRss(source(), fixture, 1000)[0];
+    const wide = layoutHeadline(headline, 80)!;
+    expect(formatHeadlineLayout(wide)).toBe("• axios · general · A useful & safe headline");
+
+    const medium = layoutHeadline(headline, 30)!;
+    expect(medium.source).toBe("axios");
+    expect(medium.category).toBeUndefined();
+    expect(displayWidth(formatHeadlineLayout(medium))).toBeLessThanOrEqual(30);
+
+    const narrow = layoutHeadline(headline, 20)!;
+    expect(narrow.source).toBeUndefined();
+    expect(narrow.category).toBeUndefined();
+    expect(displayWidth(formatHeadlineLayout(narrow))).toBeLessThanOrEqual(20);
+  });
+
+  it("keeps status messages within narrow widths", () => {
+    expect(displayWidth(formatHeadlineState("loading", 10))).toBeLessThanOrEqual(10);
+    expect(displayWidth(formatHeadlineState("unavailable", 10))).toBeLessThanOrEqual(10);
+  });
+
+  it("truncates Unicode by display cells without splitting grapheme clusters", () => {
+    const headline = { ...parseRss(source(), fixture, 1000)[0]!, title: "東京 👩‍💻 headline" };
+    const layout = layoutHeadline(headline, 8)!;
+    expect(displayWidth(formatHeadlineLayout(layout))).toBeLessThanOrEqual(8);
+    expect(layout.title.endsWith("…")).toBe(true);
+    expect(layout.title).not.toContain("👩");
   });
 });
 

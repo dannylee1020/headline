@@ -1,7 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
-import { displaySegments, HEADLINE_BULLET, terminalHyperlink } from "../../core/format.js";
+import {
+  formatHeadlineState,
+  headlineLayoutPrefix,
+  layoutHeadline,
+  terminalHyperlink,
+  terminalWidth,
+} from "../../core/format.js";
 import { refreshFeeds } from "../../core/fetch-feeds.js";
 import { NewsController } from "../../runtime/news-controller.js";
 import { FileSnapshotCache } from "../../runtime/file-cache.js";
@@ -31,11 +37,12 @@ export default function headlineExtension(pi: ExtensionAPI): void {
           ctx.ui.setStatus(STATUS_KEY, undefined);
           return;
         }
+        const width = terminalWidth();
         const headline = controller?.getHeadline();
-        const segments = displaySegments(headline);
-        const line = segments
-          ? `${ctx.ui.theme.fg("accent", HEADLINE_BULLET)} ${ctx.ui.theme.fg("dim", `${segments.source} · ${segments.category} · `)}${ctx.ui.theme.fg("muted", terminalHyperlink(segments.title, segments.url))}`
-          : ctx.ui.theme.fg("dim", controller?.getSnapshot() ? `${HEADLINE_BULLET} headlines unavailable` : `${HEADLINE_BULLET} loading headlines…`);
+        const layout = layoutHeadline(headline, width);
+        const line = layout
+          ? `${ctx.ui.theme.fg("accent", layout.marker)}${ctx.ui.theme.fg("dim", headlineLayoutPrefix(layout).slice(layout.marker.length))}${ctx.ui.theme.fg("text", terminalHyperlink(layout.title, layout.url))}`
+          : ctx.ui.theme.fg("dim", formatHeadlineState(controller?.getSnapshot() ? "unavailable" : "loading", width));
         ctx.ui.setStatus(STATUS_KEY, line);
       } catch {
         // Host rendering must never affect agent execution.

@@ -3,9 +3,15 @@ import { fileURLToPath } from "node:url";
 import { ActivityStore, FileSnapshotCache } from "../../runtime/file-cache.js";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
-import { formatLinkedHeadline, HEADLINE_BULLET } from "../../core/format.js";
+import {
+  formatHeadlineState,
+  headlineLayoutPrefix,
+  layoutHeadline,
+  terminalHyperlink,
+  terminalWidth,
+} from "../../core/format.js";
 import { buildPool, selectHeadline } from "../../core/pool.js";
-import type { NewsSnapshot } from "../../core/types.js";
+import type { Headline } from "../../core/types.js";
 import { refreshNews } from "../../runtime/refresh-service.js";
 
 export interface HookInput {
@@ -42,6 +48,19 @@ export async function runLifecycle(action: "active" | "idle", input: HookInput |
 
 function cliPath(): string {
   return fileURLToPath(new URL("../../cli/index.js", import.meta.url));
+}
+
+function ansiEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.NO_COLOR === undefined && env.TERM !== "dumb";
+}
+
+function formatClaudeHeadline(headline: Headline | undefined, width: number, hasSnapshot: boolean): string {
+  const layout = layoutHeadline(headline, width);
+  if (!layout) return formatHeadlineState(hasSnapshot ? "unavailable" : "loading", width);
+  const prefix = headlineLayoutPrefix(layout);
+  const title = terminalHyperlink(layout.title, layout.url);
+  if (!ansiEnabled()) return `${prefix}${title}`;
+  return `\u001b[2m${prefix}\u001b[0m${title}`;
 }
 
 function spawnRefreshWorker(): void {
@@ -84,8 +103,10 @@ export async function runStatus(input: StatusInput | undefined, options: StatusO
   if ((!lastAttempt || now - lastAttempt >= config.refreshIntervalMs) && await activity.claimRefresh(now).catch(() => false)) {
     (options.spawnWorker ?? spawnRefreshWorker)();
   }
-  if (!snapshot) return `${HEADLINE_BULLET} loading headlines…`;
-  return formatLinkedHeadline(selectHeadline(buildPool(snapshot, config.maxItems, { sourceIds: configuredSources.map((source) => source.id) }), now, config.intervalMs));
+  const headline = snapshot
+    ? selectHeadline(buildPool(snapshot, config.maxItems, { sourceIds: configuredSources.map((source) => source.id) }), now, config.intervalMs)
+    : undefined;
+  return formatClaudeHeadline(headline, terminalWidth(), Boolean(snapshot));
 }
 
 export async function runRefreshWorker(root?: string, configPath?: string): Promise<void> {
