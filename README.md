@@ -1,6 +1,41 @@
 # Headline
 
-Headline displays real-time news headlines while coding agent is actively working.
+Headline brings the feeds you already follow into your coding agent, displaying rotating, clickable headlines while the agent is actively working. Export your existing RSS reader subscriptions as OPML, point Headline at the file, and keep using the source list you already curate—without moving to another reader or adding headlines to model context.
+
+You can also start with no configuration: Headline includes a default selection of news feeds. Built-in selections are configurable, and developers can add more providers and categories through the source registry.
+
+## Choose your sources
+
+### Use subscriptions from your existing RSS reader
+
+Export an OPML subscription list from your RSS reader, then create `${HEADLINE_HOME:-$HOME/.headline}/config.json`:
+
+```json
+{
+  "version": 2,
+  "sources": {
+    "mode": "opml",
+    "path": "~/path/to/subscriptions.opml"
+  }
+}
+```
+
+Validate and load it with:
+
+```bash
+headline opml inspect ~/path/to/subscriptions.opml
+headline refresh
+```
+
+OPML gives Headline the feed URLs, names, and folders already maintained by your reader. Headline fetches those RSS or Atom feeds independently; it does not import unread state, starred items, credentials, downloaded articles, or reader-specific filters. Re-export the OPML file only when your subscriptions or folders change.
+
+### Start immediately with built-in providers
+
+No configuration file is required. Headline starts with selected feeds from Axios, BBC, NPR, TechCrunch, and Yahoo Finance. To choose different bundled providers or categories, edit `config.json` as described in **[Configuration](docs/configuration.md)**.
+
+### Add providers through source code
+
+To extend the built-in registry, add first-party RSS/XML feeds and their default selections in [`src/core/default-sources.ts`](src/core/default-sources.ts), update the registry assertions and tests, then rebuild Headline. This keeps custom or contributed providers explicit and version-controlled; arbitrary feed collections are better supplied through OPML.
 
 ## One-command installation
 
@@ -24,9 +59,9 @@ The installer stages and builds before changing host configuration, keeps a time
 
 Codex and tmux are intentionally not part of v0.
 
-## Sources
+## Built-in provider registry
 
-Headline's built-in registry uses unauthenticated, first-party RSS/XML feeds from these providers:
+Headline's zero-configuration registry uses unauthenticated, first-party RSS/XML feeds from these providers:
 
 - Axios — `general` — <https://api.axios.com/feed/>
 - BBC — `general`, `world`, `uk`, `business`, `politics`, `technology`, `health`, `education`, `science`, `entertainment`, `sports` — [official feed directory](https://www.bbc.com/news/10628494)
@@ -40,7 +75,7 @@ Headline retains headline metadata only: title, article URL, source, category, a
 
 ## Configuration
 
-Headline works without a configuration file. To customize built-in providers, use an exported OPML subscription list, change visibility, or adjust refresh and rotation intervals, edit `${HEADLINE_HOME:-$HOME/.headline}/config.json`.
+Headline works without a configuration file. To use your RSS reader's OPML export, customize bundled providers, change visibility, or adjust refresh and rotation intervals, edit `${HEADLINE_HOME:-$HOME/.headline}/config.json`.
 
 See **[Configuration](docs/configuration.md)** for every supported field, available provider/category values, defaults, OPML setup, validation behavior, and examples.
 
