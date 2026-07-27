@@ -1,0 +1,9 @@
+version: '3'
+
+tasks:
+  install:local:
+    desc: Build and install the current checkout through the normal installer
+    dir: '{{.TASKFILE_DIR}}'
+    silent: true
+    cmds:
+      - HEADLINE_SOURCE_DIR="$PWD" sh "$PWD/install.sh"

@@ -12,6 +12,7 @@ INSTALL_DIR=${HEADLINE_HOME:+$HEADLINE_HOME/app}
 INSTALL_DIR=${INSTALL_DIR:-$HOME_DIR/.headline/app}
 LAUNCHER_PATH=${HEADLINE_HOME:+$HEADLINE_HOME/bin/headline}
 LAUNCHER_PATH=${LAUNCHER_PATH:-$HOME_DIR/.headline/bin/headline}
+SOURCE_DIR=${HEADLINE_SOURCE_DIR:-}
 
 work_dir=
 current_ready=
@@ -90,6 +91,12 @@ record_failed() {
 }
 
 validate_paths() {
+  if [ -n "$SOURCE_DIR" ]; then
+    SOURCE_DIR=$(cd "$SOURCE_DIR" 2>/dev/null && pwd -P) \
+      || fail "local source directory does not exist: $HEADLINE_SOURCE_DIR"
+    [ -f "$SOURCE_DIR/package.json" ] \
+      || fail "local source directory does not contain package.json: $SOURCE_DIR"
+  fi
   [ -n "$HOME_DIR" ] || fail "HOME must be set for a user-local installation"
   case "$HEADLINE_HOME" in
     ""|/|"$HOME_DIR"|.) fail "HEADLINE_HOME must be a dedicated user-local directory" ;;
@@ -104,15 +111,29 @@ validate_paths() {
   if [ "$INSTALL_DIR" = "$PWD" ]; then
     fail "Headline application directory must not be the current working directory"
   fi
+  if [ -n "$SOURCE_DIR" ]; then
+    if [ "$INSTALL_DIR" = "$SOURCE_DIR" ]; then
+      fail "Headline application directory must not be the local source directory"
+    fi
+    if [ -d "$INSTALL_DIR" ] && [ ! -L "$INSTALL_DIR" ]; then
+      installed_source=$(cd "$INSTALL_DIR" 2>/dev/null && pwd -P || true)
+      if [ "$installed_source" = "$SOURCE_DIR" ]; then
+        fail "Headline application directory must not contain the local source directory"
+      fi
+    fi
+  fi
 }
 
 check_tools() {
   missing=
-  for tool in curl tar node npm; do
+  for tool in tar node npm; do
     if ! has_command "$tool"; then
       missing="${missing}${missing:+, }$tool"
     fi
   done
+  if [ -z "$SOURCE_DIR" ] && ! has_command curl; then
+    missing="${missing}${missing:+, }curl"
+  fi
   [ -z "$missing" ] || fail "missing required command(s): $missing"
   node_version=$(node --version 2>/dev/null || true)
   version_at_least "$node_version" "22.19.0" || fail "Node >=22.19.0 is required; detected ${node_version:-unknown}"
@@ -163,20 +184,40 @@ build_staging() {
   work_dir="$parent/.headline-work.$$"
   if [ -e "$work_dir" ]; then abort_install "staging path already exists: $work_dir"; fi
   mkdir -p "$work_dir/extracted" || abort_install "cannot create staging directory"
-  archive="$work_dir/source.tar.gz"
-  url=$(archive_url)
-  curl -fsSL --retry 3 --retry-delay 1 --location --proto '=https' --tlsv1.2 "$url" -o "$archive" || abort_install "source archive download failed"
-  tar -xzf "$archive" -C "$work_dir/extracted" || abort_install "source archive extraction failed"
-  success "Source downloaded"
+  if [ -n "$SOURCE_DIR" ]; then
+    source_root="$work_dir/extracted/headline-local"
+    mkdir -p "$source_root" || abort_install "cannot create local source staging directory"
+    archive="$work_dir/source.tar"
+    (
+      cd "$SOURCE_DIR" &&
+      tar -cf "$archive" \
+        --exclude='./.git' \
+        --exclude='./.kkt' \
+        --exclude='./memory' \
+        --exclude='./node_modules' \
+        --exclude='./dist' \
+        --exclude='./coverage' \
+        --exclude='./.headline' \
+        .
+    ) || abort_install "local source staging failed"
+    tar -xf "$archive" -C "$source_root" || abort_install "local source extraction failed"
+    success "Local source staged"
+  else
+    archive="$work_dir/source.tar.gz"
+    url=$(archive_url)
+    curl -fsSL --retry 3 --retry-delay 1 --location --proto '=https' --tlsv1.2 "$url" -o "$archive" || abort_install "source archive download failed"
+    tar -xzf "$archive" -C "$work_dir/extracted" || abort_install "source archive extraction failed"
+    success "Source downloaded"
 
-  source_root=
-  for candidate in "$work_dir"/extracted/*; do
-    if [ -f "$candidate/package.json" ]; then
-      source_root=$candidate
-      break
-    fi
-  done
-  [ -n "$source_root" ] || abort_install "source archive did not contain a repository package.json"
+    source_root=
+    for candidate in "$work_dir"/extracted/*; do
+      if [ -f "$candidate/package.json" ]; then
+        source_root=$candidate
+        break
+      fi
+    done
+    [ -n "$source_root" ] || abort_install "source archive did not contain a repository package.json"
+  fi
   [ -f "$source_root/package-lock.json" ] || abort_install "source archive did not contain package-lock.json"
   [ -f "$source_root/tsconfig.build.json" ] || abort_install "source archive did not contain the build configuration"
   [ -f "$source_root/install.sh" ] || abort_install "source archive did not contain install.sh"

@@ -1,4 +1,4 @@
-import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, cp, lstat, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 const execFileAsync = promisify(execFile);
 const shellScript = join(process.cwd(), "install.sh");
 
-async function fakePath(hosts: Record<string, string> = {}, options: { archive?: string; npmFailure?: boolean; fakeNode?: boolean } = {}): Promise<{ path: string; marker: string }> {
+async function fakePath(hosts: Record<string, string> = {}, options: { archive?: string; npmFailure?: boolean; npmBuildArtifacts?: boolean; fakeNode?: boolean } = {}): Promise<{ path: string; marker: string }> {
   const root = await mkdtemp(join(tmpdir(), "headline-path-"));
   const marker = join(root, "curl-called");
   const bin = join(root, "bin");
@@ -31,7 +31,13 @@ if [ "$1" = "-e" ]; then
 fi
 exit 0
 `);
-    await writeFile(join(bin, "npm"), `#!/bin/sh\n${options.npmFailure ? "printf 'npm build failure detail\\n' >&2\nexit 1" : "printf 'npm internal noise\\n'\nexit 0"}\n`);
+    await writeFile(join(bin, "npm"), `#!/bin/sh
+if [ "$1" = "run" ] && [ "$3" = "build" ] && [ "${options.npmBuildArtifacts ? "yes" : "no"}" = "yes" ]; then
+  mkdir -p dist/cli dist/adapters/pi dist/adapters/opencode
+  touch dist/cli/index.js dist/adapters/pi/index.js dist/adapters/opencode/index.js
+fi
+${options.npmFailure ? "printf 'npm build failure detail\\n' >&2\nexit 1" : "printf 'npm internal noise\\n'\nexit 0"}
+`);
     await chmod(join(bin, "node"), 0o755);
     await chmod(join(bin, "npm"), 0o755);
   } else {
@@ -115,6 +121,14 @@ describe("install.sh", () => {
   });
 });
 
+async function localSource(): Promise<string> {
+  const source = await mkdtemp(join(tmpdir(), "headline-local-source-"));
+  for (const file of ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.build.json", "vitest.config.ts", "install.sh", "README.md"]) {
+    await cp(join(process.cwd(), file), join(source, file));
+  }
+  return source;
+}
+
 async function sourceArchive(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), "headline-archive-"));
   const source = join(root, "headline-source");
@@ -150,6 +164,32 @@ describe("install.sh staging", () => {
     expect(result.stderr).toContain("npm build failure detail");
     expect(result.stderr).toContain("source build failed; existing install was not changed");
     expect(await import("node:fs/promises").then(({ readFile }) => readFile(sentinel, "utf8"))).toBe("keep");
+  });
+
+  it("installs local source through the normal real-directory promotion", async () => {
+    const source = await localSource();
+    const home = await mkdtemp(join(tmpdir(), "headline-local-source-home-"));
+    const installDir = join(home, "app");
+    await mkdir(installDir);
+    await writeFile(join(installDir, "old-version"), "replace me\n");
+    await writeFile(join(home, "config.json"), "{\"visibility\":\"always\"}\n");
+    const fake = await fakePath({ pi: "0.81.1" }, { fakeNode: true, npmBuildArtifacts: true });
+    const result = await execFileAsync("sh", [shellScript], {
+      env: {
+        ...process.env,
+        PATH: fake.path,
+        HEADLINE_HOME: home,
+        HEADLINE_SOURCE_DIR: source,
+      },
+    });
+    expect(result.stdout).toContain("✓ Local source staged");
+    expect(result.stdout).not.toContain("✓ Source downloaded");
+    expect((await lstat(installDir)).isDirectory()).toBe(true);
+    expect((await lstat(installDir)).isSymbolicLink()).toBe(false);
+    await access(join(installDir, "dist", "cli", "index.js"));
+    await expect(access(join(installDir, "old-version"))).rejects.toBeTruthy();
+    expect(await readFile(join(home, "config.json"), "utf8")).toContain("always");
+    await expect(access(fake.marker)).rejects.toBeTruthy();
   });
 
   it("replaces the application while preserving user data", async () => {

@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join, resolve } from "node:path";
 import { installClaude } from "../adapters/claude/install.js";
@@ -122,7 +123,16 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
   }
 }
 
-const invoked = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+export function isEntrypoint(argvPath: string | undefined, modulePath: string): boolean {
+  if (!argvPath) return false;
+  try {
+    return realpathSync(resolve(argvPath)) === realpathSync(modulePath);
+  } catch {
+    return resolve(argvPath) === resolve(modulePath);
+  }
+}
+
+const invoked = isEntrypoint(process.argv[1], fileURLToPath(import.meta.url));
 if (invoked) {
   main().then((code) => {
     process.exitCode = code;
