@@ -41,7 +41,7 @@ export default function headlineExtension(pi: ExtensionAPI): void {
         const headline = controller?.getHeadline();
         const layout = layoutHeadline(headline, width);
         const line = layout
-          ? `${ctx.ui.theme.fg("accent", layout.marker)}${ctx.ui.theme.fg("dim", headlineLayoutPrefix(layout).slice(layout.marker.length))}${ctx.ui.theme.bold(ctx.ui.theme.fg("text", terminalHyperlink(layout.title, layout.url)))}`
+          ? `${ctx.ui.theme.fg("accent", layout.marker)}${ctx.ui.theme.fg("dim", headlineLayoutPrefix(layout).slice(layout.marker.length))}${ctx.ui.theme.bold(ctx.ui.theme.fg("dim", terminalHyperlink(layout.title, layout.url)))}`
           : (() => {
               const state = formatHeadlineState(controller?.getSnapshot() ? "unavailable" : "loading", width);
               return `${ctx.ui.theme.fg("accent", state.slice(0, 1))}${ctx.ui.theme.fg("dim", state.slice(1))}`;

@@ -14,7 +14,7 @@ import {
 const CLAUDE_COLORS = {
   marker: [215, 119, 87],
   metadata: [153, 153, 153],
-  title: [230, 230, 230],
+  title: [196, 196, 196],
 } as const;
 import { buildPool, selectHeadline } from "../../core/pool.js";
 import type { Headline } from "../../core/types.js";

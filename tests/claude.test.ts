@@ -69,7 +69,7 @@ describe("Claude integration", () => {
     const styled = await runStatus({ session_id: "session-1" }, { root, configPath, now: 1000, spawnWorker: vi.fn() });
     expect(styled).toContain("\u001b[38;2;215;119;87m•");
     expect(styled).toContain("\u001b[38;2;153;153;153m");
-    expect(styled).toContain("\u001b[38;2;230;230;230m\u001b[1m");
+    expect(styled).toContain("\u001b[38;2;196;196;196m\u001b[1m");
     expect(displayWidth(styled)).toBeLessThanOrEqual(80);
     vi.unstubAllEnvs();
   });

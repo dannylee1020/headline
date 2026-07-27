@@ -1,11 +1,19 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TextAttributes } from "@opentui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installClaude } from "../src/adapters/claude/install.js";
-import opencodePlugin, { linkedHeadline } from "../src/adapters/opencode/index.js";
+import opencodePlugin, { linkedHeadline, renderLinkedHeadline } from "../src/adapters/opencode/index.js";
 import piExtension from "../src/adapters/pi/index.js";
+
+vi.mock("@opentui/solid/jsx-runtime", () => {
+  const element = (type: string, props: Record<string, unknown>) => ({ type, props });
+  return { Fragment: "fragment", jsx: element, jsxs: element, jsxDEV: element };
+});
+vi.mock("@opentui/solid/jsx-dev-runtime", () => {
+  const element = (type: string, props: Record<string, unknown>) => ({ type, props });
+  return { Fragment: "fragment", jsx: element, jsxs: element, jsxDEV: element };
+});
 
 describe("adapter surfaces", () => {
   afterEach(() => {
@@ -32,14 +40,24 @@ describe("adapter surfaces", () => {
       category: "general",
       fetchedAt: 1000,
       feedOrdinal: 0,
-    }, 80, { accent: "accent", textMuted: "muted", text: "text" } as never);
+    }, 80, { accent: "accent", textMuted: "muted" } as never);
 
-    const titleChunk = line?.chunks.at(-1);
-    expect(titleChunk).toMatchObject({
-      text: "A useful headline",
-      fg: "text",
-      attributes: TextAttributes.BOLD,
-      link: { url: "https://example.com/story" },
+    expect(line).toMatchObject({
+      marker: { text: "•", fg: "accent" },
+      metadata: { text: " npr · general · ", fg: "muted" },
+      title: { text: "A useful headline", fg: "muted", url: "https://example.com/story" },
+    });
+
+    const rendered = renderLinkedHeadline(line!) as unknown as {
+      type: string;
+      props: { content?: unknown; children: Array<{ type: string; props: Record<string, unknown> }> };
+    };
+    expect(rendered.type).toBe("text");
+    expect(rendered.props.content).toBeUndefined();
+    expect(rendered.props.children.map((child) => child.type)).toEqual(["span", "span", "b"]);
+    expect(rendered.props.children[2]?.props.children).toMatchObject({
+      type: "a",
+      props: { href: "https://example.com/story", children: "A useful headline" },
     });
   });
 
@@ -75,7 +93,7 @@ describe("adapter surfaces", () => {
     const rendered = statuses.find((line) => line?.includes("A useful & safe headline") || line?.includes("Second headline"));
     expect(rendered).toContain("<accent>");
     expect(rendered).toContain("<dim>");
-    expect(rendered).toContain("<bold><text>");
+    expect(rendered).toContain("<bold><dim>");
     await handlers.get("agent_settled")?.({}, context);
     expect(statuses.at(-1)).toBeUndefined();
 

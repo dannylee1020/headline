@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule, TuiThemeCurrent } from "@opencode-ai/plugin/tui";
-import { StyledText, TextAttributes, type TextChunk } from "@opentui/core";
+
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
 import {
@@ -18,34 +18,41 @@ function styledState(
   status: "loading" | "unavailable",
   width: number,
   theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
-): StyledText {
+) {
   const text = formatHeadlineState(status, width);
-  return new StyledText([
-    { __isChunk: true, text: text.slice(0, 1), fg: theme.accent },
-    { __isChunk: true, text: text.slice(1), fg: theme.textMuted },
-  ]);
+  return (
+    <text>
+      <span style={{ fg: theme.accent }}>{text.slice(0, 1)}</span>
+      <span style={{ fg: theme.textMuted }}>{text.slice(1)}</span>
+    </text>
+  );
 }
 
 export function linkedHeadline(
   headline: Headline | undefined,
   width: number,
-  theme: Pick<TuiThemeCurrent, "accent" | "textMuted" | "text">,
-): StyledText | undefined {
+  theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
+) {
   const layout = layoutHeadline(headline, width);
   if (!layout) return undefined;
   const prefix = headlineLayoutPrefix(layout);
-  const titleChunk: TextChunk = {
-    __isChunk: true,
-    text: layout.title,
-    fg: theme.text,
-    attributes: TextAttributes.BOLD,
-    ...(layout.url ? { link: { url: layout.url } } : {}),
+  return {
+    marker: { text: layout.marker, fg: theme.accent },
+    metadata: { text: prefix.slice(layout.marker.length), fg: theme.textMuted },
+    title: { text: layout.title, fg: theme.textMuted, url: layout.url },
   };
-  return new StyledText([
-    { __isChunk: true, text: layout.marker, fg: theme.accent },
-    { __isChunk: true, text: prefix.slice(layout.marker.length), fg: theme.textMuted },
-    titleChunk,
-  ]);
+}
+
+export function renderLinkedHeadline(line: NonNullable<ReturnType<typeof linkedHeadline>>) {
+  return (
+    <text>
+      <span style={{ fg: line.marker.fg }}>{line.marker.text}</span>
+      <span style={{ fg: line.metadata.fg }}>{line.metadata.text}</span>
+      <b style={{ fg: line.title.fg }}>
+        {line.title.url ? <a href={line.title.url}>{line.title.text}</a> : line.title.text}
+      </b>
+    </text>
+  );
 }
 
 const tui: TuiPlugin = async (api) => {
@@ -111,9 +118,10 @@ const tui: TuiPlugin = async (api) => {
       app_bottom: () => {
         sync();
         if (!controller?.isActive()) return <box />;
-        const line = linkedHeadline(controller.getHeadline(), api.renderer.width, api.theme.current)
-          ?? styledState(controller.getSnapshot() ? "unavailable" : "loading", api.renderer.width, api.theme.current);
-        return <text content={line} />;
+        const line = linkedHeadline(controller.getHeadline(), api.renderer.width, api.theme.current);
+        return line
+          ? renderLinkedHeadline(line)
+          : styledState(controller.getSnapshot() ? "unavailable" : "loading", api.renderer.width, api.theme.current);
       },
     },
   });
