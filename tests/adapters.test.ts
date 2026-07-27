@@ -1,9 +1,10 @@
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { TextAttributes } from "@opentui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installClaude } from "../src/adapters/claude/install.js";
-import opencodePlugin from "../src/adapters/opencode/index.js";
+import opencodePlugin, { linkedHeadline } from "../src/adapters/opencode/index.js";
 import piExtension from "../src/adapters/pi/index.js";
 
 describe("adapter surfaces", () => {
@@ -18,6 +19,28 @@ describe("adapter surfaces", () => {
     expect(typeof installClaude).toBe("function");
     expect(Object.keys(opencodePlugin)).toEqual(["id", "tui"]);
     expect((opencodePlugin as { id: string }).id).toBe("headline");
+  });
+
+  it("uses native OpenCode styling for the linked title", () => {
+    const line = linkedHeadline({
+      id: "headline-1",
+      title: "A useful headline",
+      url: "https://example.com/story",
+      sourceId: "npr:general",
+      providerId: "npr",
+      sourceName: "NPR",
+      category: "general",
+      fetchedAt: 1000,
+      feedOrdinal: 0,
+    }, 80, { accent: "accent", textMuted: "muted", text: "text" } as never);
+
+    const titleChunk = line?.chunks.at(-1);
+    expect(titleChunk).toMatchObject({
+      text: "A useful headline",
+      fg: "text",
+      attributes: TextAttributes.BOLD,
+      link: { url: "https://example.com/story" },
+    });
   });
 
   it("keeps a Pi extension status visible for the session", async () => {
@@ -36,7 +59,10 @@ describe("adapter surfaces", () => {
     const context = {
       mode: "tui",
       ui: {
-        theme: { fg: (_color: string, text: string) => text },
+        theme: {
+          fg: (color: string, text: string) => `<${color}>${text}</${color}>`,
+          bold: (text: string) => `<bold>${text}</bold>`,
+        },
         setStatus: (_key: string, text: string | undefined) => statuses.push(text),
       },
     };
@@ -44,8 +70,12 @@ describe("adapter surfaces", () => {
     await handlers.get("session_start")?.({}, context);
     expect(statuses.at(-1)).toBeUndefined();
     await handlers.get("agent_start")?.({}, context);
-    expect(statuses).toContain("• loading headlines…");
-    await vi.waitFor(() => expect(statuses.some((line) => line?.includes("headline"))).toBe(true));
+    expect(statuses.some((line) => line?.includes("loading headlines"))).toBe(true);
+    await vi.waitFor(() => expect(statuses.some((line) => line?.includes("A useful & safe headline") || line?.includes("Second headline"))).toBe(true));
+    const rendered = statuses.find((line) => line?.includes("A useful & safe headline") || line?.includes("Second headline"));
+    expect(rendered).toContain("<accent>");
+    expect(rendered).toContain("<dim>");
+    expect(rendered).toContain("<bold><text>");
     await handlers.get("agent_settled")?.({}, context);
     expect(statuses.at(-1)).toBeUndefined();
 

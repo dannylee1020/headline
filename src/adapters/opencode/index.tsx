@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule, TuiThemeCurrent } from "@opencode-ai/plugin/tui";
-import { StyledText, type TextChunk } from "@opentui/core";
+import { StyledText, TextAttributes, type TextChunk } from "@opentui/core";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
 import {
@@ -14,11 +14,19 @@ import type { Headline } from "../../core/types.js";
 import { FileSnapshotCache } from "../../runtime/file-cache.js";
 import { FileRefreshCoordinator } from "../../runtime/refresh-coordinator.js";
 
-function styledState(status: "loading" | "unavailable", width: number, theme: Pick<TuiThemeCurrent, "textMuted">): StyledText {
-  return new StyledText([{ __isChunk: true, text: formatHeadlineState(status, width), fg: theme.textMuted }]);
+function styledState(
+  status: "loading" | "unavailable",
+  width: number,
+  theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
+): StyledText {
+  const text = formatHeadlineState(status, width);
+  return new StyledText([
+    { __isChunk: true, text: text.slice(0, 1), fg: theme.accent },
+    { __isChunk: true, text: text.slice(1), fg: theme.textMuted },
+  ]);
 }
 
-function linkedHeadline(
+export function linkedHeadline(
   headline: Headline | undefined,
   width: number,
   theme: Pick<TuiThemeCurrent, "accent" | "textMuted" | "text">,
@@ -30,6 +38,7 @@ function linkedHeadline(
     __isChunk: true,
     text: layout.title,
     fg: theme.text,
+    attributes: TextAttributes.BOLD,
     ...(layout.url ? { link: { url: layout.url } } : {}),
   };
   return new StyledText([

@@ -10,6 +10,12 @@ import {
   terminalHyperlink,
   terminalWidth,
 } from "../../core/format.js";
+
+const CLAUDE_COLORS = {
+  marker: [215, 119, 87],
+  metadata: [153, 153, 153],
+  title: [230, 230, 230],
+} as const;
 import { buildPool, selectHeadline } from "../../core/pool.js";
 import type { Headline } from "../../core/types.js";
 import { refreshNews } from "../../runtime/refresh-service.js";
@@ -51,16 +57,31 @@ function cliPath(): string {
 }
 
 function ansiEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  return env.NO_COLOR === undefined && env.TERM !== "dumb";
+  return !env.NO_COLOR && env.TERM !== "dumb";
+}
+
+function ansiColor(text: string, [red, green, blue]: readonly [number, number, number]): string {
+  return `\u001b[38;2;${red};${green};${blue}m${text}\u001b[39m`;
+}
+
+function ansiBold(text: string): string {
+  return `\u001b[1m${text}\u001b[22m`;
+}
+
+function formatClaudeState(status: "loading" | "unavailable", width: number): string {
+  const text = formatHeadlineState(status, width);
+  if (!ansiEnabled()) return text;
+  return `${ansiColor(text.slice(0, 1), CLAUDE_COLORS.marker)}${ansiColor(text.slice(1), CLAUDE_COLORS.metadata)}`;
 }
 
 function formatClaudeHeadline(headline: Headline | undefined, width: number, hasSnapshot: boolean): string {
   const layout = layoutHeadline(headline, width);
-  if (!layout) return formatHeadlineState(hasSnapshot ? "unavailable" : "loading", width);
+  if (!layout) return formatClaudeState(hasSnapshot ? "unavailable" : "loading", width);
   const prefix = headlineLayoutPrefix(layout);
+  const metadata = prefix.slice(layout.marker.length);
   const title = terminalHyperlink(layout.title, layout.url);
   if (!ansiEnabled()) return `${prefix}${title}`;
-  return `\u001b[2m${prefix}\u001b[0m${title}`;
+  return `${ansiColor(layout.marker, CLAUDE_COLORS.marker)}${ansiColor(metadata, CLAUDE_COLORS.metadata)}${ansiColor(ansiBold(title), CLAUDE_COLORS.title)}`;
 }
 
 function spawnRefreshWorker(): void {

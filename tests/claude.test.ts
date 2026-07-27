@@ -64,6 +64,14 @@ describe("Claude integration", () => {
     expect(displayWidth(output)).toBeLessThanOrEqual(24);
     expect(output).toContain("…");
     vi.unstubAllEnvs();
+
+    vi.stubEnv("COLUMNS", "80");
+    const styled = await runStatus({ session_id: "session-1" }, { root, configPath, now: 1000, spawnWorker: vi.fn() });
+    expect(styled).toContain("\u001b[38;2;215;119;87m•");
+    expect(styled).toContain("\u001b[38;2;153;153;153m");
+    expect(styled).toContain("\u001b[38;2;230;230;230m\u001b[1m");
+    expect(displayWidth(styled)).toBeLessThanOrEqual(80);
+    vi.unstubAllEnvs();
   });
 
   it("honors always visibility and provider-specific category filters", async () => {
