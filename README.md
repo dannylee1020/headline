@@ -1,6 +1,6 @@
 # Headline
 
-Headline brings the news headline into your favorite coding agent's session. It displays rotating, clickable, real-time news headlines while the agent is actively working. Export your existing RSS reader subscription or configure news sources to keep you informed while waiting for agents to finish work. 
+Headline brings news into your favorite coding agent's session. It displays rotating, clickable, real-time news headlines while the agent is actively working. Export your existing RSS reader subscription or configure news sources to keep you informed while waiting for agents to finish work. 
 
 
 ## Choose your sources
