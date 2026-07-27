@@ -27,7 +27,6 @@ export type Visibility = "always" | "working" | "off";
 export type SourceMode = "built-in" | "opml";
 
 export interface HeadlineConfig {
-  readonly version: 2;
   readonly intervalMs: number;
   readonly refreshIntervalMs: number;
   readonly timeoutMs: number;
@@ -53,7 +52,6 @@ export interface LoadConfigOptions {
 }
 
 export const DEFAULT_CONFIG: HeadlineConfig = {
-  version: 2,
   intervalMs: DEFAULT_INTERVAL_MS,
   refreshIntervalMs: DEFAULT_REFRESH_INTERVAL_MS,
   timeoutMs: DEFAULT_TIMEOUT_MS,
@@ -71,6 +69,7 @@ const CATEGORIES_BY_PROVIDER = new Map(
 const LEGACY_CATEGORY_VALUES = new Set<Category>(DEFAULT_SOURCES.map((source) => source.category));
 const LEGACY_PROVIDER_VALUES = new Set<string>(DEFAULT_PROVIDER_IDS);
 const VISIBILITY_VALUES = new Set<Visibility>(["always", "working", "off"]);
+// Existing versioned files remain readable, but the current format is inferred from its shape.
 const CONFIG_KEYS = new Set(["version", "providers", "categories", "sources", "visibility", "rotationSeconds", "refreshMinutes"]);
 const SOURCE_KEYS = new Set(["mode", "providers", "path"]);
 
@@ -174,10 +173,7 @@ function parseConfig(value: unknown): HeadlineConfig {
     throw new Error("use either sources or top-level providers/categories, not both");
   }
 
-  const legacy = !hasSourceBlock && (value.version === 1 || Array.isArray(value.providers) || value.categories !== undefined);
-  if (!hasSourceBlock && value.version === 2 && value.categories !== undefined) {
-    throw new Error("version 2 config selects categories inside each providers entry");
-  }
+  const legacy = !hasSourceBlock && (Array.isArray(value.providers) || value.categories !== undefined);
   const selected = hasSourceBlock
     ? sourceConfig(value.sources)
     : legacy
@@ -298,7 +294,6 @@ export async function loadConfig(options: LoadConfigOptions = {}): Promise<Loade
 
 export function configSummary(config: HeadlineConfig): Record<string, unknown> {
   return {
-    version: config.version,
     sourceMode: config.sourceMode,
     sources: config.sourceMode === "opml"
       ? { mode: "opml", path: config.opmlPath, feedCount: config.sources.length }

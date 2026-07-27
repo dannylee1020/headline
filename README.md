@@ -12,7 +12,6 @@ Export an OPML subscription list from your RSS reader, then create `${HEADLINE_H
 
 ```json
 {
-  "version": 2,
   "sources": {
     "mode": "opml",
     "path": "~/path/to/subscriptions.opml"
@@ -37,7 +36,7 @@ No configuration file is required. Headline starts with selected feeds from Axio
 
 To extend the built-in registry, add first-party RSS/XML feeds and their default selections in [`src/core/default-sources.ts`](src/core/default-sources.ts), update the registry assertions and tests, then rebuild Headline. This keeps custom or contributed providers explicit and version-controlled; arbitrary feed collections are better supplied through OPML.
 
-## One-command installation
+## Installation
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/dannylee1020/headline/main/install.sh | sh
@@ -117,16 +116,3 @@ The installer automatically registers the Headline TUI plugin for OpenCode `>=1.
 ### Pi
 
 The installer automatically installs Headline as a user-scoped Pi package for Pi `>=0.81.1`. Headline uses Pi's native extension-status row; custom footers must include extension statuses to display it.
-
-## Validation
-
-```bash
-sh -n install.sh
-npm run typecheck
-npm test
-npm run build
-npm run check
-npm ls --omit=dev --all
-```
-
-Live GitHub archive availability, publisher feeds, and OpenCode runtime smoke are environment-dependent and are not deterministic CI requirements. Feed usage terms remain the responsibility of any future public or commercial release.

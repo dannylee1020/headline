@@ -25,7 +25,6 @@ describe("configuration", () => {
   it("selects categories independently for each provider", async () => {
     const path = await tempConfig();
     await writeFile(path, JSON.stringify({
-      version: 2,
       providers: {
         bbc: ["sports", "sports"],
         npr: ["general"],
@@ -44,7 +43,7 @@ describe("configuration", () => {
     expect(sourcesForConfig(loaded.config).map((source) => source.id)).toEqual(["bbc:sports", "npr:general"]);
   });
 
-  it("normalizes version 1 global filters for compatibility", async () => {
+  it("normalizes legacy global filters for compatibility", async () => {
     const path = await tempConfig();
     await writeFile(path, JSON.stringify({
       version: 1,
@@ -54,7 +53,7 @@ describe("configuration", () => {
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.errors).toEqual([]);
-    expect(loaded.config.version).toBe(2);
+    expect(loaded.config).not.toHaveProperty("version");
     expect(loaded.config.providers).toEqual({ bbc: ["sports"], npr: ["sports"] });
   });
 
@@ -78,7 +77,7 @@ describe("configuration", () => {
 
   it("uses defaults when providers is omitted", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ version: 2, visibility: "always" }));
+    await writeFile(path, JSON.stringify({ visibility: "always" }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.errors).toEqual([]);
@@ -87,7 +86,7 @@ describe("configuration", () => {
 
   it("falls back to defaults for an unknown provider", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ version: 2, providers: { unknown: ["general"] } }));
+    await writeFile(path, JSON.stringify({ providers: { unknown: ["general"] } }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
@@ -96,7 +95,7 @@ describe("configuration", () => {
 
   it("rejects categories not exposed by their provider", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ version: 2, providers: { axios: ["sports"] } }));
+    await writeFile(path, JSON.stringify({ providers: { axios: ["sports"] } }));
 
     const loaded = await loadConfig({ filePath: path });
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
@@ -105,11 +104,11 @@ describe("configuration", () => {
 
   it("rejects empty provider and category selections", async () => {
     const path = await tempConfig();
-    await writeFile(path, JSON.stringify({ version: 2, providers: { bbc: [] } }));
+    await writeFile(path, JSON.stringify({ providers: { bbc: [] } }));
     const emptyCategories = await loadConfig({ filePath: path });
     expect(emptyCategories.errors[0]).toMatch(/bbc categories/);
 
-    await writeFile(path, JSON.stringify({ version: 2, providers: {} }));
+    await writeFile(path, JSON.stringify({ providers: {} }));
     const emptyProviders = await loadConfig({ filePath: path });
     expect(emptyProviders.errors[0]).toMatch(/at least one provider/);
   });

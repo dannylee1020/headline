@@ -54,10 +54,10 @@ export const DEFAULT_SOURCES: readonly NewsSource[] = [
 export const DEFAULT_PROVIDER_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.providerId))];
 export const SUPPORTED_CATEGORY_IDS: readonly string[] = [...new Set(DEFAULT_SOURCES.map((source) => source.category))];
 
-/** Legacy global category defaults retained for version 1 config compatibility. */
+/** Legacy global category defaults retained for top-level array config compatibility. */
 export const DEFAULT_CATEGORIES: readonly string[] = ["general", "finance", "technology"];
 
-/** Exact default feeds, grouped by provider for version 2 configuration. */
+/** Exact default feeds, grouped by provider for current configuration. */
 export const DEFAULT_PROVIDER_CATEGORIES: ProviderCategories = {
   axios: ["general"],
   bbc: ["general", "technology"],

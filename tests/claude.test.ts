@@ -40,7 +40,6 @@ describe("Claude integration", () => {
     const root = await tempRoot();
     const configPath = join(root, "config.json");
     await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({
-      version: 2,
       providers: { npr: ["general"] },
       visibility: "always",
     })));
@@ -78,7 +77,6 @@ describe("Claude integration", () => {
     const root = await tempRoot();
     const configPath = join(root, "config.json");
     await import("node:fs/promises").then(({ writeFile }) => writeFile(configPath, JSON.stringify({
-      version: 2,
       providers: { npr: ["general"] },
       visibility: "always",
     })));

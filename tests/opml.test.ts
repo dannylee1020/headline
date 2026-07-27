@@ -77,7 +77,6 @@ describe("OPML sources", () => {
     await writeFile(join(root, "subscriptions.opml"), opml);
     const configPath = join(root, "config.json");
     await writeFile(configPath, JSON.stringify({
-      version: 2,
       sources: { mode: "opml", path: "subscriptions.opml" },
     }));
 
