@@ -1,8 +1,7 @@
 # Headline
 
-Headline brings the feeds you already follow into your coding agent, displaying rotating, clickable headlines while the agent is actively working. Export your existing RSS reader subscriptions as OPML, point Headline at the file, and keep using the source list you already curate.
+Headline brings the news headline into your favorite coding agent's session. It displays rotating, clickable, real-time news headlines while the agent is actively working. Export your existing RSS reader subscription or configure news sources to keep you informed while waiting for agents to finish work. 
 
-You can also start with no configuration: Headline includes a default selection of news feeds. Built-in selections are configurable, and developers can add more providers and categories through the source registry.
 
 ## Choose your sources
 
