@@ -4,6 +4,7 @@ import { ActivityStore, FileSnapshotCache } from "../../runtime/file-cache.js";
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
 import {
+  displayWidth,
   formatHeadlineState,
   headlineLayoutPrefix,
   layoutHeadline,
@@ -75,11 +76,12 @@ function formatClaudeState(status: "loading" | "unavailable", width: number): st
 }
 
 function formatClaudeHeadline(headline: Headline | undefined, width: number, hasSnapshot: boolean): string {
-  const layout = layoutHeadline(headline, width);
+  const linkAffordance = width >= 3 ? " ↗" : "";
+  const layout = layoutHeadline(headline, width - displayWidth(linkAffordance));
   if (!layout) return formatClaudeState(hasSnapshot ? "unavailable" : "loading", width);
   const prefix = headlineLayoutPrefix(layout);
   const metadata = prefix.slice(layout.marker.length);
-  const title = terminalHyperlink(layout.title, layout.url);
+  const title = terminalHyperlink(`${layout.title}${linkAffordance}`, layout.url);
   if (!ansiEnabled()) return `${prefix}${title}`;
   return `${ansiColor(layout.marker, CLAUDE_COLORS.marker)}${ansiColor(metadata, CLAUDE_COLORS.metadata)}${ansiColor(ansiBold(title), CLAUDE_COLORS.title)}`;
 }

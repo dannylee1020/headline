@@ -50,7 +50,8 @@
     "@earendil-works/pi-tui": ">=0.81.1",
     "@opencode-ai/plugin": ">=1.18.4 <2",
     "@opentui/core": ">=0.4.5",
-    "@opentui/solid": ">=0.4.5"
+    "@opentui/solid": ">=0.4.5",
+    "solid-js": ">=1.9.0 <2"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-coding-agent": {
@@ -63,6 +64,9 @@
       "optional": true
     },
     "@opentui/solid": {
+      "optional": true
+    },
+    "solid-js": {
       "optional": true
     },
     "@earendil-works/pi-tui": {
@@ -78,6 +82,7 @@
     "@types/node": "^22.10.0",
     "@types/sax": "^1.2.7",
     "jsonc-parser": "^3.3.1",
+    "solid-js": "1.9.12",
     "typescript": "^5.7.2",
     "vitest": "^3.0.0"
   },

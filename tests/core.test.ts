@@ -93,13 +93,13 @@ describe("RSS normalization", () => {
 describe("headline formatting", () => {
   it("prioritizes provider and headline space", () => {
     const headline = parseRss(source(), fixture, 1000)[0];
-    expect(formatHeadline(headline)).toBe("• axios · general · A useful & safe headline");
+    expect(formatHeadline(headline)).toBe("• axios · news · A useful & safe headline");
   });
 
   it("links the headline without displaying the URL", () => {
     const headline = parseRss(source(), fixture, 1000)[0];
     expect(formatLinkedHeadline(headline)).toBe(
-      "• axios · general · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
+      "• axios · news · \u001b]8;;https://example.com/story-one\u001b\\A useful & safe headline\u001b]8;;\u001b\\",
     );
     expect(terminalHyperlink("unsafe", "javascript:alert(1)")).toBe("unsafe");
   });
@@ -107,7 +107,7 @@ describe("headline formatting", () => {
   it("prioritizes title space as the available width narrows", () => {
     const headline = parseRss(source(), fixture, 1000)[0];
     const wide = layoutHeadline(headline, 80)!;
-    expect(formatHeadlineLayout(wide)).toBe("• axios · general · A useful & safe headline");
+    expect(formatHeadlineLayout(wide)).toBe("• axios · news · A useful & safe headline");
 
     const medium = layoutHeadline(headline, 30)!;
     expect(medium.source).toBe("axios");

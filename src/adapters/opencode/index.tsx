@@ -1,9 +1,11 @@
 /** @jsxImportSource @opentui/solid */
 import type { TuiPlugin, TuiPluginModule, TuiThemeCurrent } from "@opencode-ai/plugin/tui";
+import { createSignal } from "solid-js";
 
 import { loadConfig } from "../../core/config.js";
 import { sourcesForConfig } from "../../core/default-sources.js";
 import {
+  displayWidth,
   formatHeadlineState,
   headlineLayoutPrefix,
   layoutHeadline,
@@ -14,15 +16,19 @@ import type { Headline } from "../../core/types.js";
 import { FileSnapshotCache } from "../../runtime/file-cache.js";
 import { FileRefreshCoordinator } from "../../runtime/refresh-coordinator.js";
 
+const OPENCODE_BULLET = "●";
+const OPENCODE_LEFT_INSET = 1;
+
 function styledState(
   status: "loading" | "unavailable",
   width: number,
   theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
 ) {
-  const text = formatHeadlineState(status, width);
+  const leftInset = width > OPENCODE_LEFT_INSET ? OPENCODE_LEFT_INSET : 0;
+  const text = formatHeadlineState(status, width - leftInset);
   return (
-    <text>
-      <span style={{ fg: theme.accent }}>{text.slice(0, 1)}</span>
+    <text marginLeft={leftInset}>
+      <span style={{ fg: theme.accent }}>{OPENCODE_BULLET}</span>
       <span style={{ fg: theme.textMuted }}>{text.slice(1)}</span>
     </text>
   );
@@ -33,24 +39,27 @@ export function linkedHeadline(
   width: number,
   theme: Pick<TuiThemeCurrent, "accent" | "textMuted">,
 ) {
-  const layout = layoutHeadline(headline, width);
+  const leftInset = width > OPENCODE_LEFT_INSET ? OPENCODE_LEFT_INSET : 0;
+  const contentWidth = width - leftInset;
+  const linkAffordance = headline?.url && contentWidth >= 3 ? " ↗" : "";
+  const layout = layoutHeadline(headline, contentWidth - displayWidth(linkAffordance));
   if (!layout) return undefined;
   const prefix = headlineLayoutPrefix(layout);
   return {
-    marker: { text: layout.marker, fg: theme.accent },
+    marker: { text: OPENCODE_BULLET, fg: theme.accent },
     metadata: { text: prefix.slice(layout.marker.length), fg: theme.textMuted },
-    title: { text: layout.title, fg: theme.textMuted, url: layout.url },
+    title: { text: `${layout.title}${linkAffordance}`, fg: theme.textMuted, url: layout.url },
   };
 }
 
 export function renderLinkedHeadline(line: NonNullable<ReturnType<typeof linkedHeadline>>) {
   return (
-    <text>
+    <text marginLeft={OPENCODE_LEFT_INSET}>
       <span style={{ fg: line.marker.fg }}>{line.marker.text}</span>
       <span style={{ fg: line.metadata.fg }}>{line.metadata.text}</span>
-      <b style={{ fg: line.title.fg }}>
-        {line.title.url ? <a href={line.title.url}>{line.title.text}</a> : line.title.text}
-      </b>
+      {line.title.url
+        ? <a href={line.title.url} style={{ fg: line.title.fg, bold: true }}>{line.title.text}</a>
+        : <b style={{ fg: line.title.fg }}>{line.title.text}</b>}
     </text>
   );
 }
@@ -63,6 +72,13 @@ const tui: TuiPlugin = async (api) => {
   let controller: NewsController | undefined;
   let sessionId: string | undefined;
   let disposed = false;
+  const [renderRevision, setRenderRevision] = createSignal(0);
+
+  const invalidate = (): void => {
+    if (disposed) return;
+    setRenderRevision((revision) => revision + 1);
+    api.renderer.requestRender();
+  };
 
   const getSessionId = (): string | undefined => {
     const route = api.route.current;
@@ -92,7 +108,7 @@ const tui: TuiPlugin = async (api) => {
           maxBytes: config.maxBytes,
           maxItems: config.maxItems,
         }),
-        onInvalidate: () => api.renderer.requestRender(),
+        onInvalidate: invalidate,
       });
     }
     sessionId = nextSessionId;
@@ -103,7 +119,7 @@ const tui: TuiPlugin = async (api) => {
   const unsubscribe = api.event.on("session.status", (event) => {
     if (!sessionId || event.properties.sessionID === sessionId || event.properties.sessionID === getSessionId()) {
       sync();
-      api.renderer.requestRender();
+      invalidate();
     }
   });
   api.lifecycle.onDispose(() => {
@@ -116,6 +132,7 @@ const tui: TuiPlugin = async (api) => {
   api.slots.register({
     slots: {
       app_bottom: () => {
+        renderRevision();
         sync();
         if (!controller?.isActive()) return <box />;
         const line = linkedHeadline(controller.getHeadline(), api.renderer.width, api.theme.current);

@@ -59,6 +59,22 @@ describe("NewsController", () => {
     expect(scheduler.callbacks).toHaveLength(0);
   });
 
+  it("does not invalidate repeatedly when already inactive", () => {
+    const invalidate = vi.fn();
+    const controller = new NewsController({
+      cache: new MemoryCache(),
+      refresh: async () => ({ snapshot: snapshot(), failures: [] }),
+      onInvalidate: invalidate,
+    });
+    controller.deactivate();
+    controller.deactivate();
+    expect(invalidate).not.toHaveBeenCalled();
+    controller.dispose();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    controller.dispose();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+  });
+
   it("uses a fresh cached snapshot without refreshing on activation", async () => {
     const cache = new MemoryCache();
     await cache.write(snapshot());

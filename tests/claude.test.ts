@@ -69,6 +69,8 @@ describe("Claude integration", () => {
     expect(styled).toContain("\u001b[38;2;215;119;87m•");
     expect(styled).toContain("\u001b[38;2;153;153;153m");
     expect(styled).toContain("\u001b[38;2;196;196;196m\u001b[1m");
+    expect(styled).not.toContain("\u001b[4m");
+    expect(styled).toContain(" ↗");
     expect(displayWidth(styled)).toBeLessThanOrEqual(80);
     vi.unstubAllEnvs();
   });

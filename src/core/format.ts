@@ -58,10 +58,15 @@ export function terminalWidth(
   return fallback;
 }
 
+export function displayCategory(category: string): string {
+  const normalized = category.toLowerCase();
+  return normalized === "general" ? "news" : normalized;
+}
+
 export function displaySegments(headline: Headline | undefined): DisplaySegments | undefined {
   if (!headline) return undefined;
   return {
-    category: headline.category.toLowerCase(),
+    category: displayCategory(headline.category),
     source: headline.sourceName.toLowerCase(),
     title: headline.title,
     url: headline.url,

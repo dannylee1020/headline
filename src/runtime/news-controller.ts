@@ -70,6 +70,8 @@ export class NewsController {
   }
 
   deactivate(): void {
+    const wasRunning = this.active || this.timer !== undefined || this.refreshTimer !== undefined;
+    if (!wasRunning) return;
     this.active = false;
     if (this.timer !== undefined) {
       try {
