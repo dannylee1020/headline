@@ -20,7 +20,6 @@ headline doctor
 
 | Field | Type | Default | Supported values |
 | --- | --- | --- | --- |
-| `version` | number | `2` | `2`; version `1` remains readable for compatibility |
 | `sources` | object | built-in defaults | A `built-in` or `opml` source configuration |
 | `visibility` | string | `working` | `working`, `always`, or `off` |
 | `rotationSeconds` | number | `8` | `2` through `60` |
@@ -34,7 +33,6 @@ Omitting the file or any optional top-level field uses these settings:
 
 ```json
 {
-  "version": 2,
   "sources": {
     "mode": "built-in",
     "providers": {
@@ -57,7 +55,6 @@ Use `built-in` mode to select exact categories for each bundled provider:
 
 ```json
 {
-  "version": 2,
   "sources": {
     "mode": "built-in",
     "providers": {
@@ -96,7 +93,6 @@ Use `opml` mode to load subscriptions exported by an RSS reader:
 
 ```json
 {
-  "version": 2,
   "sources": {
     "mode": "opml",
     "path": "~/path/to/subscriptions.opml"
@@ -143,17 +139,3 @@ Claude Code reads configuration for each status invocation. Restart Pi or OpenCo
 Run `headline doctor` to see parsing errors, OPML warnings, the effective source mode, and the selected feed count.
 
 Invalid JSON, unknown fields, or unsupported built-in selections fall back to the built-in defaults so a host integration is not interrupted. A valid `opml` configuration with a missing or invalid file stays in OPML mode and returns no built-in fallback headlines.
-
-## Legacy configuration
-
-Version 1 configurations with top-level provider and category arrays remain readable:
-
-```json
-{
-  "version": 1,
-  "providers": ["bbc", "npr"],
-  "categories": ["technology"]
-}
-```
-
-Version 2 also accepts a top-level provider map for compatibility. New configurations should use the explicit `sources` block shown above.
