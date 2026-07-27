@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +16,6 @@ export interface InstallOptions {
 
 export interface InstallResult {
   readonly settingsPath: string;
-  readonly backupPath: string;
   readonly changed: boolean;
 }
 
@@ -110,16 +109,8 @@ export async function installClaude(options: InstallOptions = {}): Promise<Insta
   addHook(settings, "StopFailure", idleHook);
   addHook(settings, "SessionEnd", idleHook);
 
-  const backupPath = `${settingsPath}.headline.bak`;
-  try {
-    await copyFile(settingsPath, backupPath);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await mkdir(dirname(backupPath), { recursive: true });
-    await writeFile(backupPath, "{}\n", { encoding: "utf8", mode: 0o600 });
-  }
   await atomicWrite(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
-  return { settingsPath, backupPath, changed: true };
+  return { settingsPath, changed: true };
 }
 
 export const installerMarkers = { HEADLINE_STATUS, HEADLINE_LIFECYCLE } as const;

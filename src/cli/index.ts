@@ -38,7 +38,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         force: argv.includes("--force"),
         ...(launcherPath ? { commandPath: launcherPath } : {}),
       });
-      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline Claude integration at ${result.settingsPath}\nBackup: ${result.backupPath}\n`);
+      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline Claude integration at ${result.settingsPath}\n`);
       return 0;
     }
     if (argv[0] === "install" && argv[1] === "opencode") {
@@ -49,7 +49,7 @@ export async function main(argv = process.argv.slice(2)): Promise<number> {
         pluginPath,
         ...(configPath ? { configPath } : {}),
       });
-      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline OpenCode TUI plugin at ${result.configPath}\nBackup: ${result.backupPath}\n`);
+      process.stdout.write(`${result.changed ? "Installed" : "Already installed"} Headline OpenCode TUI plugin at ${result.configPath}\n`);
       return 0;
     }
     if (argv[0] === "install" && argv[1] === "pi") {

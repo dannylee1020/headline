@@ -1,4 +1,4 @@
-import { mkdtemp, readFile } from "node:fs/promises";
+import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -111,7 +111,8 @@ describe("Claude integration", () => {
     expect(parsed.theme).toBe("dark");
     expect(parsed.statusLine).toMatchObject({ type: "command", refreshInterval: 8 });
     expect(String((parsed.statusLine as { command: string }).command)).toContain("status");
-    expect(first.backupPath).toContain(".headline.bak");
+    expect(first.changed).toBe(true);
+    await expect(access(`${settingsPath}.headline.bak`)).rejects.toBeTruthy();
     await installClaude({ settingsPath, nodePath: "/node", cliPath: "/cli", commandPath: "/headline/bin/headline" });
     const launcherSettings = JSON.parse(await readFile(settingsPath, "utf8")) as { statusLine: { command: string }; hooks: Record<string, unknown[]> };
     expect(launcherSettings.statusLine.command).toContain("/headline/bin/headline");

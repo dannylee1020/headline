@@ -49,7 +49,7 @@ Prerequisites: macOS or Linux, POSIX `sh`, `curl`, `tar`, Node `>=22.19.0`, and 
 
 Set `HEADLINE_HOME` only when you need a custom Headline home directory. The application is installed at `$HEADLINE_HOME/app` and the CLI launcher at `$HEADLINE_HOME/bin/headline`.
 
-The installer stages and builds before changing host configuration, keeps a timestamped previous install, and reports restoration paths. It exits with an error if prerequisites are missing or a detected integration fails.
+The installer stages and validates each build before replacing `$HEADLINE_HOME/app`. User configuration, cache, and state live outside the application directory and remain unchanged across updates. It exits with an error if prerequisites are missing or a detected integration fails.
 
 ## Supported agents
 
@@ -108,21 +108,15 @@ Build output is generated in `dist/`. The package is private and is not publishe
 
 ### Claude Code
 
-```bash
-node dist/cli/index.js install claude
-# Explicitly replace another status line only when intended:
-node dist/cli/index.js install claude --force
-```
-
-The installer creates `<settings>.headline.bak`, preserves unrelated settings/hooks, and refuses a non-Headline status line without `--force`. The installed Claude hooks invoke the stable Headline launcher.
+The installer automatically adds the Headline status line and lifecycle hooks while preserving unrelated Claude settings. An existing non-Headline status line is left unchanged and reported as a conflict.
 
 ### OpenCode
 
-The source installer writes the stable TUI module path to the global `tui.json` configuration using a JSONC-aware, backup-safe edit. For a manual install into another config, use the CLI's `install opencode --config PATH` command. With the default `working` visibility, the row is visible only for the current session while OpenCode reports `busy` or `retry`; use `always` to keep it visible while the session is open.
+The installer automatically registers the Headline TUI plugin for OpenCode `>=1.18.4`, preserving unrelated `tui.json` values and comments. Restart OpenCode after installation.
 
 ### Pi
 
-The source installer invokes `pi install <stable-install-dir>` at user scope. For a project-local install, use the CLI's `install pi --project` command. Pi owns its settings format; Headline does not edit Pi settings directly. Headline publishes a native extension status; with the default `working` visibility it appears between `agent_start` and `agent_settled`, while `always` keeps it visible for the session. Pi's default footer renders extension statuses as its final row; custom footers must render `footerData.getExtensionStatuses()` to preserve that integration.
+The installer automatically installs Headline as a user-scoped Pi package for Pi `>=0.81.1`. Headline uses Pi's native extension-status row; custom footers must include extension statuses to display it.
 
 ## Validation
 

@@ -20,16 +20,22 @@ claude_cmd=
 opencode_cmd=
 pi_cmd=
 detected_count=0
-installed_count=0
 failed_count=0
-unsupported_count=0
-no_host_count=0
 failed_hosts=
-installed_hosts=
 unsupported_hosts=
 
 say() {
   printf '%s\n' "$*"
+}
+success() {
+  say "  ✓ $*"
+}
+failure() {
+  say "  ✗ $*"
+}
+first_word() {
+  set -- $1
+  printf '%s' "${1:-unknown}"
 }
 shell_quote() {
   value=$1
@@ -78,17 +84,9 @@ version_at_least() {
   ' "$node_version" "$minimum" >/dev/null 2>&1
 }
 
-record_installed() {
-  installed_count=$((installed_count + 1))
-  installed_hosts="${installed_hosts}${installed_hosts:+, }$1"
-}
 record_failed() {
   failed_count=$((failed_count + 1))
   failed_hosts="${failed_hosts}${failed_hosts:+, }$1"
-}
-record_unsupported() {
-  unsupported_count=$((unsupported_count + 1))
-  unsupported_hosts="${unsupported_hosts}${unsupported_hosts:+, }$1"
 }
 
 validate_paths() {
@@ -125,9 +123,7 @@ detect_hosts() {
     claude_cmd=$(command -v claude)
     claude_version=$(claude --version 2>/dev/null || true)
     detected_count=$((detected_count + 1))
-    say "Detected Claude Code: $claude_cmd ${claude_version}"
-  else
-    no_host_count=$((no_host_count + 1))
+    success "Claude Code $(first_word "$claude_version")"
   fi
 
   if has_command opencode; then
@@ -135,15 +131,12 @@ detect_hosts() {
     opencode_version=$(opencode --version 2>/dev/null || true)
     if version_at_least "$opencode_version" "1.18.4"; then
       detected_count=$((detected_count + 1))
-      say "Detected OpenCode: $opencode_cmd ${opencode_version}"
+      success "OpenCode $(first_word "$opencode_version")"
     else
-      unsupported_count=$((unsupported_count + 1))
       unsupported_hosts="${unsupported_hosts}${unsupported_hosts:+, }OpenCode ${opencode_version:-unknown} (<1.18.4)"
-      warn "OpenCode ${opencode_version:-unknown} is unsupported; Headline requires >=1.18.4"
+      say "  ! OpenCode $(first_word "$opencode_version") requires 1.18.4 or newer"
       opencode_cmd=
     fi
-  else
-    no_host_count=$((no_host_count + 1))
   fi
 
   if has_command pi; then
@@ -151,15 +144,12 @@ detect_hosts() {
     pi_version=$(pi --version 2>/dev/null || true)
     if version_at_least "$pi_version" "0.81.1"; then
       detected_count=$((detected_count + 1))
-      say "Detected Pi: $pi_cmd ${pi_version}"
+      success "Pi $(first_word "$pi_version")"
     else
-      unsupported_count=$((unsupported_count + 1))
       unsupported_hosts="${unsupported_hosts}${unsupported_hosts:+, }Pi ${pi_version:-unknown} (<0.81.1)"
-      warn "Pi ${pi_version:-unknown} is unsupported; Headline requires >=0.81.1"
+      say "  ! Pi $(first_word "$pi_version") requires 0.81.1 or newer"
       pi_cmd=
     fi
-  else
-    no_host_count=$((no_host_count + 1))
   fi
 }
 
@@ -175,9 +165,9 @@ build_staging() {
   mkdir -p "$work_dir/extracted" || abort_install "cannot create staging directory"
   archive="$work_dir/source.tar.gz"
   url=$(archive_url)
-  warn "Downloading source archive from $url"
   curl -fsSL --retry 3 --retry-delay 1 --location --proto '=https' --tlsv1.2 "$url" -o "$archive" || abort_install "source archive download failed"
   tar -xzf "$archive" -C "$work_dir/extracted" || abort_install "source archive extraction failed"
+  success "Source downloaded"
 
   source_root=
   for candidate in "$work_dir"/extracted/*; do
@@ -191,8 +181,13 @@ build_staging() {
   [ -f "$source_root/tsconfig.build.json" ] || abort_install "source archive did not contain the build configuration"
   [ -f "$source_root/install.sh" ] || abort_install "source archive did not contain install.sh"
 
-  warn "Installing locked dependencies and building Headline"
-  (cd "$source_root" && npm ci --no-audit --no-fund && npm run build) || abort_install "source build failed; existing install was not changed"
+  build_log="$work_dir/build.log"
+  if (cd "$source_root" && npm ci --no-audit --no-fund && npm run --silent build) >"$build_log" 2>&1; then
+    success "Application built"
+  else
+    cat "$build_log" >&2
+    abort_install "source build failed; existing install was not changed"
+  fi
   [ -f "$source_root/dist/cli/index.js" ] || abort_install "build did not produce the Headline CLI"
   [ -f "$source_root/dist/adapters/pi/index.js" ] || abort_install "build did not produce the Pi adapter"
   [ -f "$source_root/dist/adapters/opencode/index.js" ] || abort_install "build did not produce the OpenCode adapter"
@@ -208,17 +203,13 @@ build_staging() {
 }
 
 promote() {
-  backup_path="${INSTALL_DIR}.backup.$(date +%Y%m%d%H%M%S 2>/dev/null || printf '%s' "$$")"
   if [ -e "$INSTALL_DIR" ] || [ -L "$INSTALL_DIR" ]; then
-    mv "$INSTALL_DIR" "$backup_path" || abort_install "cannot preserve existing install at $backup_path"
+    rm -rf "$INSTALL_DIR" || abort_install "cannot replace existing install at $INSTALL_DIR"
   fi
   if mv "$current_ready" "$INSTALL_DIR"; then
     current_ready=
-    say "Installed Headline application at $INSTALL_DIR"
-    if [ -e "$backup_path" ]; then say "Previous install preserved at $backup_path"; fi
   else
-    if [ -e "$backup_path" ]; then mv "$backup_path" "$INSTALL_DIR" 2>/dev/null || true; fi
-    abort_install "cannot promote built install; previous install was restored when possible"
+    abort_install "cannot install application at $INSTALL_DIR"
   fi
 }
 
@@ -235,60 +226,63 @@ write_launcher() {
   chmod 755 "$launcher_tmp" || abort_install "cannot make launcher executable: $LAUNCHER_PATH"
   mv -f "$launcher_tmp" "$LAUNCHER_PATH" || abort_install "cannot install launcher: $LAUNCHER_PATH"
   launcher_tmp=
-  say "Installed Headline CLI launcher at $LAUNCHER_PATH"
 }
 
 install_claude() {
-  say "Installing Claude Code integration"
   node "$INSTALL_DIR/dist/cli/index.js" install claude --launcher "$LAUNCHER_PATH"
 }
 
 install_opencode() {
-  say "Installing OpenCode TUI integration"
   node "$INSTALL_DIR/dist/cli/index.js" install opencode --plugin-path "$INSTALL_DIR/dist/adapters/opencode/index.js"
 }
 
 install_pi() {
-  say "Installing Pi integration"
   node "$INSTALL_DIR/dist/cli/index.js" install pi --path "$INSTALL_DIR"
 }
 
 run_hosts() {
   if [ -n "$claude_cmd" ]; then
-    if install_claude; then record_installed Claude; else record_failed Claude; warn "Claude Code installation failed; continuing"; fi
+    if install_claude >/dev/null; then success "Claude Code connected"; else record_failed "Claude Code"; failure "Claude Code"; fi
   fi
   if [ -n "$opencode_cmd" ]; then
-    if install_opencode; then record_installed OpenCode; else record_failed OpenCode; warn "OpenCode installation failed; continuing"; fi
+    if install_opencode >/dev/null; then success "OpenCode connected"; else record_failed OpenCode; failure "OpenCode"; fi
   fi
   if [ -n "$pi_cmd" ]; then
-    if install_pi; then record_installed Pi; else record_failed Pi; warn "Pi installation failed; continuing"; fi
+    if install_pi >/dev/null; then success "Pi connected"; else record_failed Pi; failure "Pi"; fi
   fi
 }
 
 validate_paths
 check_tools
+say "Headline"
+say ""
+say "Agents"
 detect_hosts
 
 if [ "$detected_count" -eq 0 ]; then
-  say "No supported coding agent detected (Claude Code, OpenCode >=1.18.4, or Pi >=0.81.1)."
-  say "Install one of the supported agents, then rerun this command."
+  say "  ! No supported agent found"
+  say "    Install Claude Code, OpenCode 1.18.4+, or Pi 0.81.1+, then retry."
   exit 2
 fi
 
+say ""
+say "Installing"
 build_staging
 promote
 write_launcher
+success "Application installed"
 run_hosts
 
 say ""
-say "Headline installation summary"
-say "  detected/compatible: $detected_count"
-say "  installed: ${installed_hosts:-none}"
-say "  unsupported: ${unsupported_hosts:-none}"
-say "  failed: ${failed_hosts:-none}"
 if [ "$failed_count" -gt 0 ]; then
-  say "One or more detected integrations failed. The Headline application is installed; rerun after fixing the reported host issue."
+  say "Installed with errors"
+  say "  $HEADLINE_HOME"
+  say "  Failed: $failed_hosts"
   exit 1
 fi
-say "All detected Headline integrations installed successfully."
+say "Installed"
+say "  $HEADLINE_HOME"
+if [ -n "$unsupported_hosts" ]; then
+  say "  Skipped: $unsupported_hosts"
+fi
 exit 0

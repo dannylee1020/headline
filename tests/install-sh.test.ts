@@ -1,4 +1,4 @@
-import { chmod, cp, mkdtemp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, cp, mkdtemp, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import { execFile, execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,8 +15,23 @@ async function fakePath(hosts: Record<string, string> = {}, options: { archive?:
   await mkdir(bin);
   await symlink("/usr/bin/tar", join(bin, "tar"));
   if (options.fakeNode) {
-    await writeFile(join(bin, "node"), "#!/bin/sh\nif [ \"$1\" = \"--version\" ]; then printf 'v24.0.1\\n'; fi\nexit 0\n");
-    await writeFile(join(bin, "npm"), `#!/bin/sh\n${options.npmFailure ? "exit 1" : "exit 0"}\n`);
+    await writeFile(join(bin, "node"), `#!/bin/sh
+if [ "$1" = "--version" ]; then printf 'v24.0.1\\n'; exit 0; fi
+if [ "$1" = "-e" ]; then
+  awk -v a="$3" -v b="$4" 'BEGIN {
+    sub(/^[^0-9]*/, "", a); sub(/^[^0-9]*/, "", b)
+    split(a, av, "."); split(b, bv, ".")
+    for (i = 1; i <= 3; i++) {
+      if ((av[i] + 0) > (bv[i] + 0)) exit 0
+      if ((av[i] + 0) < (bv[i] + 0)) exit 1
+    }
+    exit 0
+  }'
+  exit $?
+fi
+exit 0
+`);
+    await writeFile(join(bin, "npm"), `#!/bin/sh\n${options.npmFailure ? "printf 'npm build failure detail\\n' >&2\nexit 1" : "printf 'npm internal noise\\n'\nexit 0"}\n`);
     await chmod(join(bin, "node"), 0o755);
     await chmod(join(bin, "npm"), 0o755);
   } else {
@@ -52,7 +67,8 @@ describe("install.sh", () => {
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(2);
-    expect(String(result.stdout)).toContain("No supported coding agent detected");
+    expect(String(result.stdout)).toContain("! No supported agent found");
+    expect(String(result.stdout)).toContain("Install Claude Code, OpenCode 1.18.4+, or Pi 0.81.1+, then retry.");
     await expect(import("node:fs/promises").then(({ access }) => access(fake.marker))).rejects.toBeTruthy();
   });
 
@@ -67,10 +83,18 @@ describe("install.sh", () => {
         HEADLINE_HOME: home,
       },
     });
-    expect(result.stdout).toContain("Detected Claude Code");
-    expect(result.stdout).toContain("Detected OpenCode");
-    expect(result.stdout).toContain("Detected Pi");
-    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
+    expect(result.stdout).toContain("Headline\n\nAgents");
+    expect(result.stdout).toContain("✓ Claude Code 2.1.137");
+    expect(result.stdout).toContain("✓ OpenCode 1.18.4");
+    expect(result.stdout).toContain("✓ Pi 0.81.1");
+    expect(result.stdout).toContain("✓ Source downloaded");
+    expect(result.stdout).toContain("✓ Application built");
+    expect(result.stdout).toContain("✓ Application installed");
+    expect(result.stdout).toContain("✓ Claude Code connected");
+    expect(result.stdout).toContain("✓ OpenCode connected");
+    expect(result.stdout).toContain("✓ Pi connected");
+    expect(result.stdout).toContain(`Installed\n  ${home}`);
+    expect(result.stdout).not.toContain("npm internal noise");
   });
 
   it("marks old OpenCode unsupported without blocking Pi", async () => {
@@ -84,9 +108,10 @@ describe("install.sh", () => {
         HEADLINE_HOME: home,
       },
     });
-    expect(`${result.stdout}${result.stderr}`).toContain("unsupported");
-    expect(result.stdout).toContain("Detected Pi");
-    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
+    expect(result.stdout).toContain("! OpenCode 1.0.0 requires 1.18.4 or newer");
+    expect(result.stdout).toContain("✓ Pi 0.81.1");
+    expect(result.stdout).toContain("✓ Pi connected");
+    expect(result.stdout).toContain("Skipped: OpenCode 1.0.0 (<1.18.4)");
   });
 });
 
@@ -122,15 +147,20 @@ describe("install.sh staging", () => {
       },
     }).catch((error: any) => error);
     expect(result.code).toBe(1);
+    expect(result.stderr).toContain("npm build failure detail");
+    expect(result.stderr).toContain("source build failed; existing install was not changed");
     expect(await import("node:fs/promises").then(({ readFile }) => readFile(sentinel, "utf8"))).toBe("keep");
   });
 
-  it("promotes a built tree and invokes detected Pi", async () => {
+  it("replaces the application while preserving user data", async () => {
     const archive = await sourceArchive();
     const parent = await mkdtemp(join(tmpdir(), "headline-promote-"));
     const home = join(parent, "home");
     const installDir = join(home, "app");
+    const oldApplicationFile = join(installDir, "old-version");
+    await mkdir(installDir, { recursive: true });
     await mkdir(join(home, "cache"), { recursive: true });
+    await writeFile(oldApplicationFile, "replace me\n");
     await writeFile(join(home, "config.json"), "{\"visibility\":\"always\"}\n");
     await writeFile(join(home, "cache", "snapshot.json"), "cached\n");
     const fake = await fakePath({ pi: "0.81.1" }, { archive, fakeNode: true });
@@ -141,9 +171,11 @@ describe("install.sh staging", () => {
         HEADLINE_HOME: home,
       },
     });
-    expect(result.stdout).toContain("Installed Headline application");
-    expect(result.stdout).toContain("All detected Headline integrations installed successfully");
-    await import("node:fs/promises").then(({ access }) => access(join(installDir, "dist", "cli", "index.js")));
+    expect(result.stdout).toContain("✓ Application installed");
+    expect(result.stdout).toContain(`Installed\n  ${home}`);
+    await access(join(installDir, "dist", "cli", "index.js"));
+    await expect(access(oldApplicationFile)).rejects.toBeTruthy();
+    expect((await readdir(home)).filter((name) => name.startsWith("app.backup."))).toEqual([]);
     const launcher = join(home, "bin", "headline");
     const launcherContents = await readFile(launcher, "utf8");
     expect(launcherContents).toContain(join(installDir, "dist", "cli", "index.js"));

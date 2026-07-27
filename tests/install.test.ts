@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -21,7 +21,7 @@ describe("OpenCode installer", () => {
     expect(output).toContain("// preserved");
     expect(output).toContain('"other"');
     expect(output).toContain(pluginPath);
-    expect(await readFile(`${configPath}.headline.bak`, "utf8")).toContain('"other"');
+    await expect(access(`${configPath}.headline.bak`)).rejects.toBeTruthy();
     expect((await installOpenCode({ configPath, pluginPath })).changed).toBe(false);
   });
 

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,7 +11,6 @@ export interface OpenCodeInstallOptions {
 
 export interface OpenCodeInstallResult {
   readonly configPath: string;
-  readonly backupPath: string;
   readonly pluginPath: string;
   readonly changed: boolean;
 }
@@ -68,15 +67,6 @@ async function atomicWrite(path: string, content: string): Promise<void> {
   await rename(temporary, path);
 }
 
-async function backup(path: string, backupPath: string, existed: boolean): Promise<void> {
-  await mkdir(dirname(backupPath), { recursive: true });
-  if (existed) {
-    await copyFile(path, backupPath);
-  } else {
-    await writeFile(backupPath, "{}\n", { encoding: "utf8", mode: 0o600 });
-  }
-}
-
 function parseConfig(text: string): Record<string, unknown> {
   const errors: ParseError[] = [];
   const parsed: unknown = parse(text, errors, { allowTrailingComma: true, disallowComments: false });
@@ -89,14 +79,11 @@ function parseConfig(text: string): Record<string, unknown> {
 export async function installOpenCode(options: OpenCodeInstallOptions): Promise<OpenCodeInstallResult> {
   const configPath = resolve(options.configPath ?? defaultOpenCodeConfigPath());
   const pluginPath = resolve(options.pluginPath);
-  const backupPath = `${configPath}.headline.bak`;
   let text = "";
-  let existed = true;
   try {
     text = await readFile(configPath, "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    existed = false;
     text = "{}\n";
   }
 
@@ -107,7 +94,7 @@ export async function installOpenCode(options: OpenCodeInstallOptions): Promise<
   }
   const plugins = Array.isArray(current) ? [...current] : [];
   if (plugins.some((entry) => samePlugin(entry, pluginPath))) {
-    return { configPath, backupPath, pluginPath, changed: false };
+    return { configPath, pluginPath, changed: false };
   }
   plugins.push(pluginPath);
 
@@ -115,7 +102,6 @@ export async function installOpenCode(options: OpenCodeInstallOptions): Promise<
     formattingOptions: { insertSpaces: true, tabSize: 2, eol: "\n" },
   });
   const nextText = applyEdits(text, edits);
-  await backup(configPath, backupPath, existed);
   await atomicWrite(configPath, nextText);
-  return { configPath, backupPath, pluginPath, changed: true };
+  return { configPath, pluginPath, changed: true };
 }
