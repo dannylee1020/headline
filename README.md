@@ -1,6 +1,6 @@
 # Headline
 
-Headline brings the feeds you already follow into your coding agent, displaying rotating, clickable headlines while the agent is actively working. Export your existing RSS reader subscriptions as OPML, point Headline at the file, and keep using the source list you already curate—without moving to another reader or adding headlines to model context.
+Headline brings the feeds you already follow into your coding agent, displaying rotating, clickable headlines while the agent is actively working. Export your existing RSS reader subscriptions as OPML, point Headline at the file, and keep using the source list you already curate.
 
 You can also start with no configuration: Headline includes a default selection of news feeds. Built-in selections are configurable, and developers can add more providers and categories through the source registry.
 
@@ -56,8 +56,6 @@ The installer stages and builds before changing host configuration, keeps a time
 - **Claude Code:** command status line with responsive, title-first output.
 - **OpenCode:** native TUI plugin using the `app_bottom` slot; requires OpenCode `>=1.18.4 <2`.
 - **Pi:** local package using Pi's native extension-status row; tested with Pi `0.81.1` and Node `>=22.19.0`.
-
-All three adapters use the same responsive single-line layout, prioritizing the article title as terminals get narrower. Styling and link rendering remain native to each host: Claude and Pi use terminal ANSI/OSC 8 sequences, while OpenCode uses structured TUI text and native links. Clickable links and colors ultimately depend on the terminal, multiplexer, and host rendering support.
 
 Codex and tmux are intentionally not part of v0.
 
