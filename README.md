@@ -1,5 +1,7 @@
 # Headline
 
+![Headline displaying rotating news in Claude Code](docs/assets/claude-demo.gif)
+
 Headline brings news into your favorite coding agent's session. It displays rotating, clickable, real-time news headlines while the agent is actively working. Export your existing RSS reader subscription or configure news sources to keep you informed while waiting for agents to finish work. 
 
 
