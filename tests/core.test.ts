@@ -22,11 +22,12 @@ function source(id = "axios:general") {
 }
 
 describe("default sources", () => {
-  it("contains the approved providers and first-party category feeds", () => {
+  it("contains the approved providers and RSS category feeds", () => {
     assertDefaultSources();
-    expect([...new Set(DEFAULT_SOURCES.map(({ providerId }) => providerId))]).toEqual(["axios", "bbc", "npr", "techcrunch", "yahoo-finance"]);
+    expect([...new Set(DEFAULT_SOURCES.map(({ providerId }) => providerId))]).toEqual(["axios", "ap", "bbc", "npr", "reuters", "techcrunch", "yahoo-finance"]);
     expect(sourceCapabilities()).toEqual([
       { providerId: "axios", name: "Axios", categories: ["general"] },
+      { providerId: "ap", name: "AP News", categories: ["general"] },
       {
         providerId: "bbc",
         name: "BBC",
@@ -37,19 +38,23 @@ describe("default sources", () => {
         name: "NPR",
         categories: ["general", "national", "world", "politics", "business", "economy", "technology", "health", "science", "education", "climate", "culture", "sports"],
       },
+      { providerId: "reuters", name: "Reuters", categories: ["general"] },
       { providerId: "techcrunch", name: "TechCrunch", categories: ["technology"] },
       { providerId: "yahoo-finance", name: "Yahoo Finance", categories: ["finance"] },
     ]);
     expect(sourcesForConfig({ providers: {
       axios: ["general"],
+      ap: ["general"],
       bbc: ["general", "technology"],
       npr: ["general", "technology"],
+      reuters: ["general"],
       techcrunch: ["technology"],
       "yahoo-finance": ["finance"],
     } }).map(({ id }) => id)).toEqual([
-      "axios:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "techcrunch:technology", "yahoo-finance:finance",
+      "axios:general", "ap:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "reuters:general", "techcrunch:technology", "yahoo-finance:finance",
     ]);
-    expect(JSON.stringify(DEFAULT_SOURCES)).not.toMatch(/google news/i);
+    expect(DEFAULT_SOURCES.find(({ id }) => id === "ap:general")?.url).toContain("site%3Aapnews.com");
+    expect(DEFAULT_SOURCES.find(({ id }) => id === "reuters:general")?.url).toContain("site%3Areuters.com");
   });
 });
 

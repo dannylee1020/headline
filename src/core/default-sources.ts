@@ -12,11 +12,12 @@ function feed(
 }
 
 /**
- * First-party RSS endpoints. A provider may expose several category feeds;
+ * Built-in RSS endpoints. A provider may expose several category feeds;
  * configuration selects the concrete endpoints from this registry.
  */
 export const DEFAULT_SOURCES: readonly NewsSource[] = [
   feed("axios", "Axios", "general", "https://api.axios.com/feed/"),
+  feed("ap", "AP News", "general", "https://news.google.com/rss/search?q=site%3Aapnews.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen"),
 
   feed("bbc", "BBC", "general", "https://feeds.bbci.co.uk/news/rss.xml"),
   feed("bbc", "BBC", "world", "https://feeds.bbci.co.uk/news/world/rss.xml"),
@@ -45,6 +46,7 @@ export const DEFAULT_SOURCES: readonly NewsSource[] = [
   feed("npr", "NPR", "climate", "https://feeds.npr.org/1167/rss.xml"),
   feed("npr", "NPR", "culture", "https://feeds.npr.org/1008/rss.xml"),
   feed("npr", "NPR", "sports", "https://feeds.npr.org/1055/rss.xml"),
+  feed("reuters", "Reuters", "general", "https://news.google.com/rss/search?q=site%3Areuters.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen"),
 
   feed("techcrunch", "TechCrunch", "technology", "https://techcrunch.com/feed/"),
 
@@ -60,8 +62,10 @@ export const DEFAULT_CATEGORIES: readonly string[] = ["general", "finance", "tec
 /** Exact default feeds, grouped by provider for current configuration. */
 export const DEFAULT_PROVIDER_CATEGORIES: ProviderCategories = {
   axios: ["general"],
+  ap: ["general"],
   bbc: ["general", "technology"],
   npr: ["general", "technology"],
+  reuters: ["general"],
   techcrunch: ["technology"],
   "yahoo-finance": ["finance"],
 };
@@ -107,8 +111,8 @@ export function assertDefaultSources(sources: readonly NewsSource[] = DEFAULT_SO
     }
     ids.add(source.id);
   }
-  const required = ["axios:general", "bbc:general", "bbc:technology", "bbc:sports", "npr:general", "npr:technology", "npr:sports", "techcrunch:technology", "yahoo-finance:finance"];
-  if (sources.length !== 27 || required.some((id) => !ids.has(id)) || sources.some((source) => /google news/i.test(source.name + source.url))) {
-    throw new Error("Headline source registry is missing an approved first-party feed");
+  const required = ["axios:general", "ap:general", "bbc:general", "bbc:technology", "bbc:sports", "npr:general", "npr:technology", "npr:sports", "reuters:general", "techcrunch:technology", "yahoo-finance:finance"];
+  if (sources.length !== 29 || required.some((id) => !ids.has(id))) {
+    throw new Error("Headline source registry is missing an approved feed");
   }
 }

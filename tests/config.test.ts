@@ -18,7 +18,7 @@ describe("configuration", () => {
     expect(loaded.config.providers).toEqual(DEFAULT_PROVIDER_CATEGORIES);
     expect(loaded.errors).toEqual([]);
     expect(sourcesForConfig(DEFAULT_CONFIG).map((source) => source.id)).toEqual([
-      "axios:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "techcrunch:technology", "yahoo-finance:finance",
+      "axios:general", "ap:general", "bbc:general", "bbc:technology", "npr:general", "npr:technology", "reuters:general", "techcrunch:technology", "yahoo-finance:finance",
     ]);
   });
 

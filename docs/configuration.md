@@ -37,8 +37,10 @@ Omitting the file or any optional top-level field uses these settings:
     "mode": "built-in",
     "providers": {
       "axios": ["general"],
+      "ap": ["general"],
       "bbc": ["general", "technology"],
       "npr": ["general", "technology"],
+      "reuters": ["general"],
       "techcrunch": ["technology"],
       "yahoo-finance": ["finance"]
     }
@@ -80,10 +82,17 @@ Omitting a provider excludes it. At least one provider and one supported categor
 | Provider ID | Name | Categories | Default categories |
 | --- | --- | --- | --- |
 | `axios` | Axios | `general` | `general` |
+| `ap` | AP News | `general` | `general` |
 | `bbc` | BBC | `general`, `world`, `uk`, `business`, `politics`, `technology`, `health`, `education`, `science`, `entertainment`, `sports` | `general`, `technology` |
 | `npr` | NPR | `general`, `national`, `world`, `politics`, `business`, `economy`, `technology`, `health`, `science`, `education`, `climate`, `culture`, `sports` | `general`, `technology` |
+| `reuters` | Reuters | `general` | `general` |
 | `techcrunch` | TechCrunch | `technology` | `technology` |
 | `yahoo-finance` | Yahoo Finance | `finance` | `finance` |
+
+AP News and Reuters currently use unauthenticated Google News RSS queries because their publishers do not offer free public general-news RSS feeds:
+
+- AP News: `https://news.google.com/rss/search?q=site%3Aapnews.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen`
+- Reuters: `https://news.google.com/rss/search?q=site%3Areuters.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen`
 
 Run `headline sources` to inspect the registry supported by the installed build.
 

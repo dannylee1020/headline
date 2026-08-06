@@ -31,11 +31,11 @@ OPML gives Headline the feed URLs, names, and folders already maintained by your
 
 ### Start immediately with built-in providers
 
-No configuration file is required. Headline starts with selected feeds from Axios, BBC, NPR, TechCrunch, and Yahoo Finance. To choose different bundled providers or categories, edit `config.json` as described in **[Configuration](docs/configuration.md)**.
+No configuration file is required. Headline starts with selected feeds from Axios, AP News, BBC, NPR, Reuters, TechCrunch, and Yahoo Finance. To choose different bundled providers or categories, edit `config.json` as described in **[Configuration](docs/configuration.md)**.
 
 ### Add providers through source code
 
-To extend the built-in registry, add first-party RSS/XML feeds and their default selections in [`src/core/default-sources.ts`](src/core/default-sources.ts), update the registry assertions and tests, then rebuild Headline. This keeps custom or contributed providers explicit and version-controlled; arbitrary feed collections are better supplied through OPML.
+To extend the built-in registry, add RSS/XML feeds and their default selections in [`src/core/default-sources.ts`](src/core/default-sources.ts), update the registry assertions and tests, then rebuild Headline. This keeps custom or contributed providers explicit and version-controlled; arbitrary feed collections are better supplied through OPML.
 
 ## Installation
 
@@ -61,15 +61,17 @@ Codex and tmux are intentionally not part of v0.
 
 ## Built-in provider registry
 
-Headline's zero-configuration registry uses unauthenticated, first-party RSS/XML feeds from these providers:
+Headline's zero-configuration registry uses unauthenticated RSS/XML feeds from these providers:
 
 - Axios — `general` — <https://api.axios.com/feed/>
+- AP News — `general` — [Google News RSS query](https://news.google.com/rss/search?q=site%3Aapnews.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen)
 - BBC — `general`, `world`, `uk`, `business`, `politics`, `technology`, `health`, `education`, `science`, `entertainment`, `sports` — [official feed directory](https://www.bbc.com/news/10628494)
 - NPR — `general`, `national`, `world`, `politics`, `business`, `economy`, `technology`, `health`, `science`, `education`, `climate`, `culture`, `sports` — [official topic feeds](https://feeds.npr.org/1001/rss.xml)
+- Reuters — `general` — [Google News RSS query](https://news.google.com/rss/search?q=site%3Areuters.com%20when%3A1d&hl=en-US&gl=US&ceid=US%3Aen)
 - TechCrunch — `technology` — <https://techcrunch.com/feed/>
 - Yahoo Finance — `finance` — <https://finance.yahoo.com/news/rssindex>
 
-Run `headline sources` to see the current provider/category capability union. AP is intentionally excluded because it does not provide a free public RSS feed.
+AP News and Reuters currently use Google News RSS queries because their publishers do not offer free public general-news RSS feeds. Run `headline sources` to see the current provider/category capability union.
 
 Headline retains headline metadata only: title, article URL, source, category, and timestamps. It does not scrape pages, retrieve article bodies, use API keys, send telemetry, or add headlines to model context.
 
